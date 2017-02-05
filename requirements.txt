@@ -1,0 +1,4 @@
+colorama
+gitpython # git
+keyring
+requests

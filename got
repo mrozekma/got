@@ -1,0 +1,22 @@
+#!/usr/bin/env python3.6
+import sys
+if sys.version_info < (3, 6):
+	raise RuntimeError('Python 3.6+ required')
+
+import argparse
+parser = argparse.ArgumentParser(add_help = False)
+parser.add_argument('-v', '--verbose', action = 'store_true')
+args, _ = parser.parse_known_args()
+verbose = args.verbose
+
+if __name__ == '__main__':
+	try:
+		from src import dependencies
+		from src import main
+	except Exception as e:
+		print("Fatal error: %s" % e, file = sys.stderr)
+		if verbose:
+			print(file = sys.stderr)
+			import traceback
+			traceback.print_exc(file = sys.stderr)
+		exit(1)

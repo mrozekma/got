@@ -5,6 +5,7 @@ import git
 import json
 import os
 from pathlib import Path
+import platform
 import re
 import subprocess
 import sys
@@ -89,11 +90,12 @@ def where(repo, format, clone):
 	os.makedirs(localPath.parent, exist_ok = True)
 	if verbose:
 		print(f"Cloning {url} to {localPath}")
+	scriptExtension = '.bat' if platform.system() == 'Windows' else ''
 	git.Repo.clone_from(url, str(localPath), env = {
-			'GIT_ASKPASS': str(Path(__file__).parent.parent / 'got-credential-helper'),
-			'GOT_PYTHON': sys.executable,
-			'GOT_SCRIPT': str(Path(__file__).parent.parent / 'got'),
-			'GOT_HOSTNAME': host.name,
+		'GIT_ASKPASS': str(Path(__file__).parent.parent / f"got-credential-helper{scriptExtension}"),
+		'GOT_PYTHON': sys.executable,
+		'GOT_SCRIPT': str(Path(__file__).parent.parent / 'got'),
+		'GOT_HOSTNAME': host.name,
 	})
 	db.clones[str(repo)] = str(localPath)
 	return str(localPath)

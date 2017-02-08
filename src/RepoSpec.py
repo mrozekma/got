@@ -17,4 +17,4 @@ class RepoSpec:
 		raise ValueError(f"Invalid repo spec: {spec}")
 
 	def __str__(self):
-		return (f"{self.host}/" if self.host else '') + self.name + (f"@{self.revision}" if self.revision else '')
+		return (f"{self.host}:" if self.host else '') + self.name + (f"@{self.revision}" if self.revision else '')

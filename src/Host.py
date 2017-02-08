@@ -1,4 +1,6 @@
 import abc
+import git
+import re
 import requests
 
 from .Credentials import credentials
@@ -8,6 +10,8 @@ class Host(abc.ABC):
 	def __new__(self, name, type, *args, **kw):
 		if type == 'bitbucket':
 			rtn = BitbucketHost(*args, **kw)
+		elif type == 'daemon':
+			rtn = DaemonHost(*args, **kw)
 		else:
 			raise ValueError(f"Unknown type `{type}'")
 		rtn.name = name
@@ -69,4 +73,24 @@ class BitbucketHost:
 				rtn = clone['href']
 		if rtn is None:
 			raise ValueError("No clone links found")
+		return rtn
+
+class DaemonHost:
+	def __init__(self, url, username, password):
+		self.url = url.rstrip('/')
+		self.username = username
+		self.password = password
+
+	def getCloneURL(self, name):
+		# Nothing stops 'name' from escaping the path specified by self.url, like '../../../foo'. I can't see a problem with allowing it other than that it's weird, and allowing normal subdirectory traversal could be useful, so not currently putting any restrictions on 'name'
+		rtn = f"{self.url}/{name}"
+		try:
+			git.Git().ls_remote(rtn)
+		except git.GitCommandError as e:
+			err = e.stderr
+			# Try to strip off the formatting GitCommandError puts on stderr
+			match = re.search("stderr: '(.*)'$", err)
+			if match:
+				err = match.group(1)
+			raise RuntimeError(err)
 		return rtn

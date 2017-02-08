@@ -33,10 +33,32 @@ Only ``name`` is mandatory; if ``host`` is omitted all known hosts will be searc
 
 .. WARNING:: Version pinning is not yet implemented; a repospec with a unique version will be managed separately but still synced to HEAD
 
+.. _host_types:
+
+Host types
+----------
+
+Bitbucket
+~~~~~~~~~
+
+``--type=bitbucket``
+
+A Bitbucket URL should be the root of the bitbucket installation. By default this is something like ``http://hostname:7990/``, but might contain a subdirectory depending on how Bitbucket was setup. It should *not* contain ``/projects``. The connection will be validated when the host is first added to make sure the URL is valid and the username/password is correct.
+
+Daemon
+~~~~~~
+
+``--type=daemon``
+
+Daemon hosts are hosts running `git-daemon`. When a repository named ``<repo>`` is requested, Got will attempt to clone ``<url>/<repo>``. Note that daemon hosts aren't validated, so if you get the URL wrong all requests will just fail, which Got will interpret as the host not having a repository by that name.
+
+Modes
+-----
+
 .. _where:
 
 Find a local repository
------------------------
+~~~~~~~~~~~~~~~~~~~~~~~
 
 Find a repository on disk (or clone it if you don't already have it on disk) using ``--where`` (or ``--local``, whichever you find easier to remember). It's also the default if you specify no mode at all, so the following are equivalent::
 
@@ -64,9 +86,9 @@ Note that in order to automatically clone repositories, you need to :ref:`add ho
 .. _whence:
 
 Find a remote repository
-------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~
 
-You can find which host provides a given repository, without actually cloning it, using ``--whence`` (or ``--remote``). The argument is a :ref:`repospec <repospec>`. This will output the remote clone URL, just as you'd get from running ``git remote show origin`` in a local clone. In verbose mode, it will output each searched host and the error it returned; the search stops as soon as one host returns a match.
+Find which host provides a given repository, without actually cloning it, using ``--whence`` (or ``--remote``). The argument is a :ref:`repospec <repospec>`. This will output the remote clone URL, just as you'd get from running ``git remote show origin`` in a local clone. In verbose mode, it will output each searched host and the error it returned; the search stops as soon as one host returns a match.
 
 .. code-block:: text
    :emphasize-lines: 8-9
@@ -84,7 +106,7 @@ You can find which host provides a given repository, without actually cloning it
 .. _hosts:
 
 List hosts
-----------
+~~~~~~~~~~
 
 List all registered hosts with ``--hosts``::
 
@@ -95,7 +117,7 @@ List all registered hosts with ``--hosts``::
 .. _add-host:
 
 Add host
---------
+~~~~~~~~
 
 Add a new host with ``--add-host``. It takes a number of arguments:
 
@@ -104,7 +126,7 @@ Argument                  Type       Description
 ========================= ========== ======================================================
 ``name``                  Mandatory  Friendly name of the host
 ``url``                   Mandatory  Root URL of the host
-``--type TYPE``           Optional   Host type. Currently only ``bitbucket`` is supported
+``--type TYPE``           Optional   Host type; see the :ref:`list of host types <host_types>` for more info. Defaults to ``bitbucket``
 ``--username USERNAME``   Optional   Account username. Optional if no authentication is required
 ``--password [PASSWORD]`` Optional   Account password. Optional if no authentication is required. Use ``--password`` with no password to be prompted for one on stdin
 ``--force``               Optional   Add the host even if unable to connect to it
@@ -121,7 +143,7 @@ Argument                  Type       Description
 .. _rm-host:
 
 Remove host
------------
+~~~~~~~~~~~
 
 Remove a host with ``--rm-host``. It takes a single argument, the name of the host::
 

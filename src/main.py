@@ -53,7 +53,6 @@ def findRepo(repospec):
 		except Exception as e:
 			if verbose:
 				print(f"{hostname}: {e}")
-			continue
 	if verbose:
 		print("No valid host has a record of the requested repository")
 	return None, None
@@ -86,7 +85,7 @@ def where(repo, format, clone):
 	if host is None:
 		raise RuntimeError(f"Unable to resolve repospec {repo}")
 
-	localPath = CLONE_ROOT / host.name / (f"{repo.name}-{repo.revision}" if repo.revision is not None else repo.name)
+	localPath = CLONE_ROOT / host.name / (f"{repo.name}@{repo.revision}" if repo.revision is not None else repo.name)
 	os.makedirs(localPath.parent, exist_ok = True)
 	if verbose:
 		print(f"Cloning {url} to {localPath}")
@@ -162,7 +161,7 @@ hostsParser.add_argument('--format', choices = ['plain', 'json'], default = 'pla
 addHostParser = makeMode('add-host', addHost, 'add a new git host')
 addHostParser.add_argument('name', type = type_host_name)
 addHostParser.add_argument('url')
-addHostParser.add_argument('-t', '--type', choices = ['bitbucket'], default = 'bitbucket', help = 'git host type; currently only bitbucket is supported')
+addHostParser.add_argument('-t', '--type', choices = ['bitbucket', 'daemon'], default = 'bitbucket', help = 'git host type')
 addHostParser.add_argument('-u', '--username', default = '', help = 'login username')
 addHostParser.add_argument('-p', '--password', nargs = '?', default = '', const = '-', help = "login password (empty or '-' to prompt)")
 addHostParser.add_argument('--force', action = 'store_true', help = 'add the host even if a connection cannot be established')

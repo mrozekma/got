@@ -3,6 +3,7 @@ from collections import OrderedDict
 from getpass import getpass
 import git
 import json
+from lockfile import LockFile, LockTimeout
 import os
 from pathlib import Path
 import platform
@@ -20,7 +21,8 @@ CLONE_ROOT = Path.home() / '.got' / 'repos'
 os.makedirs(CLONE_ROOT, exist_ok = True)
 
 parser = argparse.ArgumentParser(add_help = False)
-parser.add_argument('-v', '--verbose', action = 'store_true')
+parser.add_argument('-v', '--verbose', action = 'store_true', help = 'verbose output')
+parser.add_argument('--unlock', action = 'store_true', help = 'remove the lockfile if it exists')
 verbose = False
 
 modeGroup = parser.add_mutually_exclusive_group()
@@ -178,11 +180,27 @@ if len(sys.argv) == 1 or (len(sys.argv) == 2 and sys.argv[1] in ('-h', '--help')
 	parser.print_help()
 	exit(0)
 
+lock = LockFile(str(Path.home() / '.got' / 'lock'))
+lockTimeout = False
+
 parser.set_defaults(modeParser = whereParser)
 # First parse to isolate the mode; we get back a namespace containing 'modeParser' for the mode-specific parser, and a list of all the unprocessed arguments to pass on
 args, extraArgs = parser.parse_known_args()
 verbose = args.verbose
 # Then use the mode-specific parser to do the real parse
-args = args.modeParser.parse_args(extraArgs)
+modeArgs = args.modeParser.parse_args(extraArgs)
 # And pass those args to the mode's handler (don't pass 'handler', it's not a real argument)
-args.handler(**{k: v for k, v in vars(args).items() if k != 'handler'})
+if args.unlock:
+	lock.break_lock()
+while not lock.i_am_locking():
+	try:
+		lock.acquire(3)
+	except LockTimeout:
+		if not lockTimeout:
+			lockTimeout = True
+			if verbose:
+				print("Waiting for lock... (pass --unlock if the lock is stale)", file = sys.stderr)
+try:
+	modeArgs.handler(**{k: v for k, v in vars(modeArgs).items() if k != 'handler'})
+finally:
+	lock.release()

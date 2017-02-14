@@ -5,9 +5,9 @@ REPOSPEC_PATTERN = re.compile(f'^(?:({HOST_PATTERN}):)?([a-zA-Z0-9_/.-]+)(?:@([0
 
 class RepoSpec:
 	def __init__(self, name, revision = None, host = None):
-		self.name = name
-		self.revision = revision
-		self.host = host
+		self.name = name.lower()
+		self.revision = revision.lower() if revision else None
+		self.host = host.lower() if host else None
 
 	@staticmethod
 	def fromStr(spec):

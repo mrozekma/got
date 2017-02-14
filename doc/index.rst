@@ -31,8 +31,6 @@ Several modes take an argument type they refer to as a `repository specification
 
 Only ``name`` is mandatory; if ``host`` is omitted all known hosts will be searched, and if ``version`` is omitted the latest version of the repository is pulled. ``version`` is used if the caller requires a particular version of the repository; the clone will be checked out to that refspec and not updated.
 
-.. WARNING:: Version pinning is not yet implemented; a repospec with a unique version will be managed separately but still synced to HEAD
-
 .. _host_types:
 
 Host types
@@ -103,6 +101,70 @@ Find which host provides a given repository, without actually cloning it, using 
    my-bitbucket: Repository project/bad-repo does not exist
    No valid host has a record of the requested repository
 
+.. _what:
+
+Determine the repository name of a local path
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The opposite of :ref:`--where <where>`, find the name of a repository from its path on disk using ``--what``. The argument is the local clone path. This will output the :ref:`repospec <repospec>` corresponding to that repository. Passing that repospec to ``--where`` will in turn print the path again.
+
+::
+
+   $ got --what ~/.got/repos/host/project/repo
+   project/repo
+
+.. _deps:
+
+List local dependency paths
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+List the paths to all the repositories the given repository depends on using ``--deps``. The argument is a :ref:`repospec <repospec>`. Dependencies come from a :ref:`dependency file <dependencies>`.
+
+::
+
+   $ cat $(got project/repo)/deps.got
+   project/repo2
+   project/repo3
+
+   $ got --deps project/repo
+   ~/.got/repos/host/project/repo2
+   ~/.got/repos/host/project/repo3
+
+.. _git:
+
+Run git command on a repo and its dependencies
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Run an arbitrary git command on a repository and the repositories it depends on using ``--git``. There is one optional argument, ``-C`` (or ``--directory``), to specify the starting repository path; if omitted the current working directory is used. All other arguments are passed through to ``git`` directly.
+
+::
+
+   $ got --git -C $(got project/repo) status
+   my-bitbucket:project/repo
+   On branch master
+   Your branch is up-to-date with 'origin/master'.
+   nothing to commit, working directory clean
+
+   my-bitbucket:project/repo2
+   On branch master
+   Your branch is up-to-date with 'origin/master'.
+   nothing to commit, working directory clean
+
+   my-bitbucket:project/repo3
+   On branch master
+   Your branch is up-to-date with 'origin/master'.
+   nothing to commit, working directory clean
+
+Repositories pinned to a particular version are treated specially in this mode. Since these repositories are expected to remain static, a warning is printed if there are any uncommitted changes or if the repository's head no longer points to the pinned version. Got won't attempt to fix this, but you should look into it manually to figure out why the repository is in the wrong state. To help prevent this situation, certain git commands are treated specially when run on pinned repositories:
+
+============  ================================================================================
+Command       Pinned behavior
+============  ================================================================================
+commit, push  The repository is skipped; no command is run
+fetch, pull   Commits are fetched from the origin and head is hard-reset to the pinned version
+============  ================================================================================
+
+
 .. _hosts:
 
 List hosts
@@ -150,3 +212,10 @@ Remove a host with ``--rm-host``. It takes a single argument, the name of the ho
    $ got --rm-host my-bitbucket
    $ got --hosts
    Name                           Type                 URL
+
+.. _dependencies:
+
+Dependencies
+------------
+
+A repository can declare a list of the repositories it depends on by listing their :ref:`repospecs <repospec>`, one per line, in a file named ``deps.got`` in the root of the repository. The :ref:`--deps <deps>` and :ref:`--git <git>` commands make use of the dependency list. An example can be found in the :ref:`--deps <deps>` documentation.

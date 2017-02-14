@@ -1,7 +1,7 @@
 import re
 
 HOST_PATTERN = '[a-zA-Z0-9_-]+'
-REPOSPEC_PATTERN = re.compile(f'^(?:({HOST_PATTERN}):)?([a-zA-Z0-9_/-]+)(?:@([0-9a-fA-F]{{6,32}}))?$')
+REPOSPEC_PATTERN = re.compile(f'^(?:({HOST_PATTERN}):)?([a-zA-Z0-9_/-]+)(?:@([0-9a-fA-F]{{6,40}}))?$')
 
 class RepoSpec:
 	def __init__(self, name, revision = None, host = None):

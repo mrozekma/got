@@ -187,3 +187,5 @@ intersphinx_mapping = {'https://docs.python.org/': None}
 
 def setup(app):
 	app.add_stylesheet('custom.css')
+
+html_use_smartypants = False

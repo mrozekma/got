@@ -1,5 +1,6 @@
-import sys
 import re
+import sys
+import types
 
 from colorama import init as coloramaInit
 coloramaInit()
@@ -9,7 +10,11 @@ def print_return(f):
 	def wrap(*args, **kw):
 		oldStdout, sys.stdout = sys.stdout, sys.stderr
 		try:
-			print(f(*args, **kw) or '', file = oldStdout)
+			ret = f(*args, **kw)
+			if ret is not None:
+				if isinstance(ret, list) or isinstance(ret, types.GeneratorType):
+					ret = '\n'.join(ret)
+				print(ret, file = oldStdout)
 		finally:
 			sys.stdout = oldStdout
 	return wrap

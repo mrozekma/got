@@ -17,9 +17,6 @@ from .Host import Host
 from .RepoSpec import RepoSpec, HOST_PATTERN
 from .utils import clr, print_return
 
-CLONE_ROOT = Path.home() / '.got' / 'repos'
-os.makedirs(CLONE_ROOT, exist_ok = True)
-
 parser = argparse.ArgumentParser(add_help = False)
 parser.add_argument('-v', '--verbose', action = 'store_true', help = 'verbose output')
 parser.add_argument('--unlock', action = 'store_true', help = 'remove the lockfile if it exists')
@@ -100,7 +97,7 @@ def where(repo, format, clone):
 	if repo.host is None:
 		repo.host = host.name
 
-	localPath = CLONE_ROOT / host.name / (f"{repo.name}@{repo.revision}" if repo.revision is not None else repo.name)
+	localPath = Path(db.config['clone_root']) / host.name / (f"{repo.name}@{repo.revision}" if repo.revision is not None else repo.name)
 	os.makedirs(localPath.parent, exist_ok = True)
 	if verbose:
 		print(f"Cloning {url} to {localPath}")
@@ -214,6 +211,21 @@ def gitPassthrough(directory, args):
 			print(getattr(repo.git, command)(*args))
 			print()
 
+def config(key, value):
+	if key is None:
+		for key, value in db.config.items():
+			print(f"{key} = {value}")
+	else:
+		if key not in db.config:
+			raise ValueError(f"Configuration key not found: {key}")
+		print(f"Key: {key}")
+		if value is None:
+			print(f"Value: {db.config[key]}")
+		else:
+			print(f"Old value: {db.config[key]}")
+			db.config[key] = value
+			print(f"New value: {db.config[key]}")
+
 def getCredential(host):
 	if host not in credentials:
 		raise ValueError(f"Unrecognized host: {host}")
@@ -252,6 +264,10 @@ depsParser.add_argument('repo', nargs = '?', type = type_repospec, default = Non
 gitParser = makeMode('git', gitPassthrough, 'run a git command on the repo and all its dependencies')
 gitParser.add_argument('-C', '--directory', metavar = 'DIR', default = '.', help = 'root directory')
 gitParser.add_argument('args', nargs = argparse.REMAINDER, help = 'arguments to pass to git')
+
+configParser = makeMode('config', config, 'get/set configuration key(s)')
+configParser.add_argument('key', nargs = '?', help = 'configuration key to get/set; if omitted, all keys are shown')
+configParser.add_argument('value', nargs = '?', help = 'value to set')
 
 # This is used by git-credential, it's not meant for direct user interaction
 getCredentialParser = makeMode('get-credential', getCredential, argparse.SUPPRESS)

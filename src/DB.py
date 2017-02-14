@@ -2,15 +2,19 @@ import json
 import os
 from pathlib import Path
 
+DEFAULT_CONFIG = {
+	'clone_root': str(Path.home() / '.got' / 'repos'),
+}
+
 class DBFile:
-	def __init__(self, path, contains, secure = False):
+	def __init__(self, path, contains, secure = False, defaultData = {}):
 		self.path = path
 		self.contains = contains
 		self.secure = secure
 		try:
 			self.data = json.loads(self.path.read_text())
 		except FileNotFoundError:
-			self.data = {}
+			self.data = defaultData
 
 	def getJSON(self):
 		return json.dumps(self.data)
@@ -51,6 +55,7 @@ class DB:
 		if not self.dir.is_dir():
 			os.mkdir(self.dir)
 
+		self.config = DBFile(self.dir / 'config.json', 'config key', defaultData = DEFAULT_CONFIG)
 		self.hosts = DBFile(self.dir / 'hosts.json', 'host')
 		self.remotes = DBFile(self.dir / 'remotes.json', 'remote')
 		self.clones = DBFile(self.dir / 'clones.json', 'clone')

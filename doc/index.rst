@@ -213,9 +213,31 @@ Remove a host with ``--rm-host``. It takes a single argument, the name of the ho
    $ got --hosts
    Name                           Type                 URL
 
+.. _config:
+
+Config
+~~~~~~
+
+Get/set configuration keys with ``--config``. If a key and value are passed, the value is stored at that key. If only a key is passed, the current value is printed. If no arguments are passed, all key/value pairs are printed.
+
+See the :ref:`list of configuration keys <configuration>` for more information.
+
 .. _dependencies:
 
 Dependencies
 ------------
 
 A repository can declare a list of the repositories it depends on by listing their :ref:`repospecs <repospec>`, one per line, in a file named ``deps.got`` in the root of the repository. The :ref:`--deps <deps>` and :ref:`--git <git>` commands make use of the dependency list. An example can be found in the :ref:`--deps <deps>` documentation.
+
+.. _configuration:
+
+Configuration
+-------------
+
+The following configuration keys can be read and written with :ref:`--config <config>`:
+
+========================= ============================== ================================================================================
+Key                       Default                        Description
+========================= ============================== ================================================================================
+clone_root                ~/.got/repos                   Directory to store the cloned repositories in
+========================= ============================== ================================================================================

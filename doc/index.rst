@@ -81,6 +81,38 @@ Future calls will remember the path to the repository and simply output it::
 
 Note that in order to automatically clone repositories, you need to :ref:`add hosts <add-host>` for Got to search.
 
+.. _mv:
+
+Move a local repository
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Relocate an existing clone on disk with ``--mv``. It takes two arguments, the :ref:`repospec <repospec>` of the repository to move and the target path::
+
+   $ got --mv project/repo ~/new-path
+   Moved my-bitbucket:project/repo to ~/new-path
+
+.. _here:
+
+Record/forget a local repository
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If you already have a repository cloned on disk, register it with ``--here``. The arguments are a :ref:`repospec <repospec>` and the path to the clone::
+
+   $ got --here my-bitbucket:project/repo ~/my-manual-clone
+
+Normally the host part of a repospec is optional because Got can deduce it, but no host communication is involved in manually registering a clone path, so the host must be specified in the repospec::
+
+   $ got --here project/repo ~/my-manual-clone
+   Fatal error: project/repo does not specify the host; it should be of the form <host>:project/repo
+
+Set the path to ``-`` to unregister it from Got. This does not delete the actual clone.
+
+::
+
+   $ got --here my-bitbucket:project/repo -
+   my-bitbucket:project/repo no longer has a registered local clone
+   (old path still exists on disk: ~/.got/repos/my-bitbucket/project/repo)
+
 .. _whence:
 
 Find a remote repository

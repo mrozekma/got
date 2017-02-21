@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import platform
 import re
+import shutil
 import subprocess
 import sys
 
@@ -66,11 +67,13 @@ def findRepo(repospec):
 	return None, None
 
 def where(repo, format, clone):
-	def formatRtn(repo, url):
+	def formatRtn(repo, path):
 		if format == 'plain':
-			return url
+			return path
+		elif format == 'py':
+			return {'repospec': repo, 'path': path}
 		elif format == 'json':
-			return json.dumps({'repospec': str(repo), 'url': url})
+			return json.dumps({'repospec': str(repo), 'path': path})
 
 	# Ambiguous repospecs are a problem. If 'repo' lacks a host, and we can find exactly one matching clone, we use it
 	candidates = [spec for spec in map(RepoSpec.fromStr, db.clones.keys()) if spec.name == repo.name and spec.revision == repo.revision and (repo.host is None or spec.host == repo.host)]
@@ -107,7 +110,43 @@ def where(repo, format, clone):
 		r.head.reference = r.commit(repo.revision)
 		r.head.reset(index = True, working_tree = True)
 	db.clones[str(repo)] = str(localPath)
-	return str(localPath)
+	return formatRtn(repo, str(localPath))
+
+def here(repo, dir, force):
+	if dir == '-':
+		existing = where(repo, 'py', False)
+		if existing:
+			repo = existing['repospec']
+			del db.clones[str(repo)]
+			print(f"{repo} no longer has a registered local clone")
+			if Path(existing['path']).exists():
+				print(f"(old path still exists on disk: {existing['path']})")
+		return
+
+	if repo.host is None:
+		raise ValueError(f"{repo} does not specify the host; it should be of the form <host>:{repo}")
+
+	if not force:
+		existing = where(repo, 'py', False)
+		if existing:
+			raise ValueError(f"{repo} is already mapped to {existing['path']}")
+		cloneUrl = Host.fromDB(repo.host).getCloneURL(repo.name)
+
+		dir = Path(dir).resolve()
+		if not dir.exists():
+			raise ValueError(f"Path not found: {dir}")
+		try:
+			r = git.Repo(str(dir))
+		except git.InvalidGitRepositoryError:
+			raise ValueError(f"Path is not a git repository: {dir}")
+		try:
+			if not cloneUrl in r.remotes['origin'].urls:
+				raise ValueError(f"Repository does not have the correct origin URL: {cloneUrl}")
+		except IndexError:
+			raise ValueError(f"Repository has no origin: {dir}")
+
+	db.clones[str(repo)] = str(dir)
+	print(f"{repo} is located at {dir}")
 
 def what(dir):
 	path = (Path(dir) if dir is not None else Path.cwd()).resolve()
@@ -226,6 +265,22 @@ def config(key, value):
 			db.config[key] = value
 			print(f"New value: {db.config[key]}")
 
+def mv(repospec, dest):
+	clone = where(repospec, 'py', False)
+	if clone is None:
+		raise ValueError(f"No clone found for {repospec}") from None
+	repospec, src = clone['repospec'], clone['path']
+	dest = Path(dest).resolve()
+	if dest.exists():
+		if not dest.is_dir():
+			raise ValueError(f"Destination already exists: {dest}")
+		dest /= os.path.basename(dest)
+		if dest.exists():
+			raise ValueError(f"Destination already exists: {dest}")
+	shutil.move(src, dest)
+	db.clones[str(repospec)] = str(dest)
+	print(f"{repospec} moved to {dest}")
+
 def getCredential(host):
 	if host not in credentials:
 		raise ValueError(f"Unrecognized host: {host}")
@@ -236,6 +291,11 @@ whereParser = makeMode('where', print_return(where), 'find the local path to a p
 whereParser.add_argument('repo', type = type_repospec)
 whereParser.add_argument('--format', choices = ['plain', 'json'], default = 'plain')
 whereParser.add_argument('--no-clone', action = 'store_false', dest = 'clone', default = True, help = 'fail if the repository is not already cloned on disk')
+
+hereParser = makeMode('here', here, 'set the local path of a package')
+hereParser.add_argument('repo', type = type_repospec)
+hereParser.add_argument('dir', help = 'local path to set, or - to clear')
+hereParser.add_argument('-f', '--force', action = 'store_true', help = 'register the path even if a record exists or the specified directory is invalid')
 
 whatParser = makeMode('what', print_return(what), 'find the package name of a local clone')
 whatParser.add_argument('dir', nargs = '?', default = None, help = 'directory to lookup')
@@ -268,6 +328,10 @@ gitParser.add_argument('args', nargs = argparse.REMAINDER, help = 'arguments to 
 configParser = makeMode('config', config, 'get/set configuration key(s)')
 configParser.add_argument('key', nargs = '?', help = 'configuration key to get/set; if omitted, all keys are shown')
 configParser.add_argument('value', nargs = '?', help = 'value to set')
+
+mvParser = makeMode('mv', mv, 'move a cloned repository on disk')
+mvParser.add_argument('repospec', type = type_repospec)
+mvParser.add_argument('dest')
 
 # This is used by git-credential, it's not meant for direct user interaction
 getCredentialParser = makeMode('get-credential', getCredential, argparse.SUPPRESS)

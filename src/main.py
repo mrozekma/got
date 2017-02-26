@@ -200,11 +200,13 @@ def addHost(name, url, type, username, password, force):
 	# Save
 	db.hosts[name] = {'type': type, 'url': url}
 	credentials[name] = username, password
+	print(f"Added {type} host {name} at {url}")
 
 def rmHost(name):
 	if name not in db.hosts:
 		raise RuntimeError(f"Unknown host `{name}'")
 	del db.hosts[name]
+	print(f"Removed host {name}")
 
 def deps(repo):
 	if repo is None:

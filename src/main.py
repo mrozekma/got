@@ -75,6 +75,8 @@ def where(repo, format, clone):
 		elif format == 'json':
 			return json.dumps({'repospec': str(repo), 'path': path})
 
+	print(f"Looking up {repo}")
+
 	# Ambiguous repospecs are a problem. If 'repo' lacks a host, and we can find exactly one matching clone, we use it
 	candidates = [spec for spec in map(RepoSpec.fromStr, db.clones.keys()) if spec.name == repo.name and spec.revision == repo.revision and (repo.host is None or spec.host == repo.host)]
 	if len(candidates) == 1:

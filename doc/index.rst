@@ -97,6 +97,8 @@ For example::
     $ got project/repo --on-uncloned=fake
     ~/.got/repos/__REPO_NOT_FOUND__
 
+If you choose to automatically clone a missing repository, you can specify the destination directory with ``--dest``. If omitted, the directory will be chosen based on the :ref:`clone_root <configuration>`, host name, and repo name.
+
 .. _mv:
 
 Move a local repository

@@ -66,7 +66,7 @@ def findRepo(repospec):
 		print("No valid host has a record of the requested repository")
 	return None, None
 
-def where(repo, format, on_uncloned, ensure_on_disk = True):
+def where(repo, format, on_uncloned, ensure_on_disk = True, dest = None):
 	def formatRtn(repo, path):
 		if format == 'plain':
 			return path
@@ -107,7 +107,12 @@ def where(repo, format, on_uncloned, ensure_on_disk = True):
 	if repo.host is None:
 		repo.host = host.name
 
-	localPath = Path(db.config['clone_root']) / host.name / (f"{repo.name}@{repo.revision}" if repo.revision is not None else repo.name)
+	localPath = Path(dest) if dest else Path(db.config['clone_root']) / host.name / (f"{repo.name}@{repo.revision}" if repo.revision is not None else repo.name)
+	if localPath.is_dir():
+		if verbose:
+			print(f"{localPath} already exists; switching to here mode")
+		return here(repo, str(localPath), False)
+
 	os.makedirs(localPath.parent, exist_ok = True)
 	if verbose:
 		print(f"Cloning {url} to {localPath}")
@@ -300,6 +305,7 @@ whereParser.add_argument('--format', choices = ['plain', 'json'], default = 'pla
 group = whereParser.add_mutually_exclusive_group()
 group.add_argument('--on-uncloned', choices = ['clone', 'skip', 'fail', 'fake'], default = 'clone', help = "what to do if the clone doesn't exist")
 group.add_argument('--no-clone', action = 'store_const', dest = 'on_uncloned', const = 'skip', help = argparse.SUPPRESS) # backwards-compatibility version of --on-uncloned=skip
+whereParser.add_argument('-d', '--dest', nargs = '?', default = None, help = 'where to store a new clone if one is made')
 
 hereParser = makeMode('here', here, 'set the local path of a package')
 hereParser.add_argument('repo', type = type_repospec)

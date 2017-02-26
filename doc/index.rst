@@ -81,6 +81,22 @@ Future calls will remember the path to the repository and simply output it::
 
 Note that in order to automatically clone repositories, you need to :ref:`add hosts <add-host>` for Got to search.
 
+If the repository isn't already on disk, the ``--on-uncloned`` flag controls what should be done. The possible arguments are:
+
+========  ===========
+Argument  Description
+========  ===========
+clone     Automatically clone the repository. This is the default behavior
+skip      Silently stop, printing no path
+fail      Raise a fatal error
+fake      Print a fake clone path that contains an error string
+========  ===========
+
+For example::
+
+    $ got project/repo --on-uncloned=fake
+    ~/.got/repos/__REPO_NOT_FOUND__
+
 .. _mv:
 
 Move a local repository

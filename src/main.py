@@ -66,7 +66,7 @@ def findRepo(repospec):
 		print("No valid host has a record of the requested repository")
 	return None, None
 
-def where(repo, format, clone):
+def where(repo, format, on_uncloned, ensure_on_disk = True):
 	def formatRtn(repo, path):
 		if format == 'plain':
 			return path
@@ -75,7 +75,8 @@ def where(repo, format, clone):
 		elif format == 'json':
 			return json.dumps({'repospec': str(repo), 'path': path})
 
-	print(f"Looking up {repo}")
+	if verbose:
+		print(f"Looking up {repo}")
 
 	# Ambiguous repospecs are a problem. If 'repo' lacks a host, and we can find exactly one matching clone, we use it
 	candidates = [spec for spec in map(RepoSpec.fromStr, db.clones.keys()) if spec.name == repo.name and spec.revision == repo.revision and (repo.host is None or spec.host == repo.host)]
@@ -83,7 +84,7 @@ def where(repo, format, clone):
 		repo = candidates[0]
 		localPath = db.clones[str(repo)]
 		# Make sure the local path actually exists
-		if Path(localPath).is_dir():
+		if not ensure_on_disk or Path(localPath).is_dir():
 			return formatRtn(repo, localPath)
 		elif verbose:
 			print(f"Local clone `{localPath}' no longer exists")
@@ -92,8 +93,12 @@ def where(repo, format, clone):
 	elif verbose:
 		print("No local clone on record")
 
-	if not clone:
+	if on_uncloned == 'skip':
 		return
+	elif on_uncloned == 'fail':
+		raise RuntimeError(f"No local clone of {repo}")
+	elif on_uncloned == 'fake':
+		return str(Path(db.config['clone_root']) / '__REPO_NOT_FOUND__')
 
 	# If we don't have a matching clone, we need to find its host and clone it
 	host, url = findRepo(repo)
@@ -116,7 +121,7 @@ def where(repo, format, clone):
 
 def here(repo, dir, force):
 	if dir == '-':
-		existing = where(repo, 'py', False)
+		existing = where(repo, 'py', 'skip', False)
 		if existing:
 			repo = existing['repospec']
 			del db.clones[str(repo)]
@@ -129,7 +134,7 @@ def here(repo, dir, force):
 		raise ValueError(f"{repo} does not specify the host; it should be of the form <host>:{repo}")
 
 	if not force:
-		existing = where(repo, 'py', False)
+		existing = where(repo, 'py', 'skip')
 		if existing:
 			raise ValueError(f"{repo} is already mapped to {existing['path']}")
 		cloneUrl = Host.fromDB(repo.host).getCloneURL(repo.name)
@@ -203,13 +208,13 @@ def deps(repo):
 			print("Current directory is not a tracked repository")
 			return
 		repo = RepoSpec.fromStr(spec)
-	depsPath = Path(where(repo, 'plain', True)) / 'deps.got'
+	depsPath = Path(where(repo, 'plain', 'clone')) / 'deps.got'
 	if not depsPath.exists():
 		print(f"{repo} has no dependencies file ({depsPath})")
 		return
 	for depSpec in depsPath.read_text().split('\n'):
 		if depSpec:
-			yield where(RepoSpec.fromStr(depSpec), 'plain', True)
+			yield where(RepoSpec.fromStr(depSpec), 'plain', 'clone')
 
 def gitPassthrough(directory, args):
 	if not args:
@@ -268,7 +273,7 @@ def config(key, value):
 			print(f"New value: {db.config[key]}")
 
 def mv(repospec, dest):
-	clone = where(repospec, 'py', False)
+	clone = where(repospec, 'py', 'skip')
 	if clone is None:
 		raise ValueError(f"No clone found for {repospec}") from None
 	repospec, src = clone['repospec'], clone['path']
@@ -292,7 +297,9 @@ def getCredential(host):
 whereParser = makeMode('where', print_return(where), 'find the local path to a package, cloning it from a git host if necessary', ['local'])
 whereParser.add_argument('repo', type = type_repospec)
 whereParser.add_argument('--format', choices = ['plain', 'json'], default = 'plain')
-whereParser.add_argument('--no-clone', action = 'store_false', dest = 'clone', default = True, help = 'fail if the repository is not already cloned on disk')
+group = whereParser.add_mutually_exclusive_group()
+group.add_argument('--on-uncloned', choices = ['clone', 'skip', 'fail', 'fake'], default = 'clone', help = "what to do if the clone doesn't exist")
+group.add_argument('--no-clone', action = 'store_const', dest = 'on_uncloned', const = 'skip', help = argparse.SUPPRESS) # backwards-compatibility version of --on-uncloned=skip
 
 hereParser = makeMode('here', here, 'set the local path of a package')
 hereParser.add_argument('repo', type = type_repospec)

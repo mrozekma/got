@@ -18,3 +18,9 @@ class RepoSpec:
 
 	def __str__(self):
 		return (f"{self.host}:" if self.host else '') + self.name + (f"@{self.revision}" if self.revision else '')
+
+	def __eq__(self, o):
+		return isinstance(o, RepoSpec) and self.name == o.name and self.revision == o.revision and self.host == o.host
+
+	def __hash__(self):
+		return hash(str(self))

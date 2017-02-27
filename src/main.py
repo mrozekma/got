@@ -242,13 +242,29 @@ def deps(repo):
 			print("Current directory is not a tracked repository")
 			return
 		repo = RepoSpec.fromStr(spec)
-	depsPath = Path(where(repo, 'plain', 'clone')) / 'deps.got'
-	if not depsPath.exists():
-		print(f"{repo} has no dependencies file ({depsPath})")
-		return
-	for depSpec in depsPath.read_text().split('\n'):
-		if depSpec:
-			yield where(RepoSpec.fromStr(depSpec), 'plain', 'clone')
+
+	paths = OrderedDict()
+	stack = []
+	def visit(repo):
+		if repo in stack:
+			stack.append(repo)
+			raise RuntimeError(f"Dependency cycle: {' -> '.join(map(str, stack))}")
+		w = where(repo, 'plain', 'clone')
+		depsPath = Path(w) / 'deps.got'
+		if not depsPath.exists():
+			if not stack: # This is the first repo, the one the user specified
+				print(f"{repo} has no dependencies file ({depsPath})")
+			return w
+		stack.append(repo)
+		for depSpec in depsPath.read_text().split('\n'):
+			if depSpec:
+				depSpec = RepoSpec.fromStr(depSpec)
+				if depSpec not in paths:
+					paths[depSpec] = visit(depSpec)
+		stack.pop()
+		return w
+	visit(repo)
+	return list(paths.values())
 
 def gitPassthrough(directory, args):
 	if not args:

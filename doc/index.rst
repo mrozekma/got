@@ -187,7 +187,7 @@ The opposite of :ref:`--where <where>`, find the name of a repository from its p
 List local dependency paths
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-List the paths to all the repositories the given repository depends on using ``--deps``. The argument is a :ref:`repospec <repospec>`. Dependencies come from a :ref:`dependency file <dependencies>`.
+Recursively list the paths to all the repositories the given repository depends on using ``--deps``. The argument is a :ref:`repospec <repospec>`. Dependencies come from a :ref:`dependency file <dependencies>`.
 
 ::
 
@@ -198,6 +198,8 @@ List the paths to all the repositories the given repository depends on using ``-
    $ got --deps project/repo
    ~/.got/repos/host/project/repo2
    ~/.got/repos/host/project/repo3
+
+Since this operation is recursive and printing the path to a local clone will cause it to be cloned if not already, running ``--deps`` on a given repospec will ensure that all dependent repos down the tree exist on disk.
 
 .. _git:
 

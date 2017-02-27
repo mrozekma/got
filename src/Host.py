@@ -24,7 +24,10 @@ class Host(abc.ABC):
 	@staticmethod
 	def fromDB(name):
 		kw = {}
-		kw.update(db.hosts[name])
+		try:
+			kw.update(db.hosts[name])
+		except KeyError:
+			raise ValueError(f"No host named {name}")
 		if name in credentials:
 			kw['username'], kw['password'] = credentials[name]
 		return Host(name, **kw)
@@ -65,6 +68,14 @@ class BitbucketHost:
 		if rtn is None:
 			raise ValueError("No clone links found")
 		return rtn
+
+	def getReposInProject(self, project):
+		try:
+			return [json['name'] for json in self.conn.projects[project].repos.all()]
+		except stashy.errors.NotFoundException as e:
+			raise ConnectionError(str(e))
+		except stashy.errors.AuthenticationException:
+			raise ConnectionError("Invalid/insufficient credentials")
 
 class DaemonHost:
 	def __init__(self, url, username, password):

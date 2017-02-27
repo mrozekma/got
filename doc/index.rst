@@ -64,15 +64,18 @@ Find a repository on disk (or clone it if you don't already have it on disk) usi
    $ got --where project/repo
    $ got --local project/repo
 
-The argument is a :ref:`repospec <repospec>`. Got will output the local path to the requested repository. In verbose mode, it will mention when a repository is being cloned for the first time.
+The argument is one or more :ref:`repospecs <repospec>`. Got will output the local path to the requested repositories. In verbose mode, it will mention when a repository is being cloned for the first time.
 
 .. code-block:: text
-   :emphasize-lines: 2-3
+   :emphasize-lines: 2-5
 
-   $ got -v project/repo
+   $ got -v project/repo project/repo2
    No local clone on record
    Cloning http://user@localhost:7990/scm/project/repo.git to ~/.got/repos/host/project/repo
+   No local clone on record
+   Cloning http://user@localhost:7990/scm/project/repo2.git to ~/.got/repos/host/project/repo2
    ~/.got/repos/host/project/repo
+   ~/.got/repos/host/project/repo2
 
 Future calls will remember the path to the repository and simply output it::
 
@@ -98,6 +101,22 @@ For example::
     ~/.got/repos/__REPO_NOT_FOUND__
 
 If you choose to automatically clone a missing repository, you can specify the destination directory with ``--dest``. If omitted, the directory will be chosen based on the :ref:`clone_root <configuration>`, host name, and repo name.
+
+In the case of Bitbucket repositories, you can specify ``project/*`` as a shorthand for all repositories in the specified project. For example, if ``project`` contains two repositories, ``repo1`` and ``repo2``, then the following are equivalent::
+
+    $ got 'project/*'
+    $ got project/repo1 project/repo2
+
+This repospec shorthand is only valid in where mode, and only with Bitbucket hosts:
+
+.. code-block:: text
+   :emphasize-lines: 3
+
+    $ got --add-host host http://localhost --type daemon
+    $ got 'host:project/*'
+    got --where: error: argument repos: Unable to resolve multipart repospec: host `host' is not a Bitbucket host
+
+If no host is specified, all registered Bitbucket hosts are searched for the specified project.
 
 .. _mv:
 

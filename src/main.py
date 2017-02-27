@@ -14,7 +14,7 @@ import sys
 
 from .Credentials import credentials
 from .DB import db
-from .Host import Host
+from .Host import Host, BitbucketHost
 from .RepoSpec import RepoSpec, HOST_PATTERN
 from .utils import clr, print_return
 
@@ -42,6 +42,26 @@ def type_repospec(spec):
 		return RepoSpec.fromStr(spec)
 	except ValueError as e:
 		raise argparse.ArgumentTypeError(str(e))
+
+def type_multipart_repospec(spec):
+	# 'project/*' is a special case for Bitbucket hosts
+	if spec.endswith('/*'):
+		project = spec[:-2]
+		# If a host is specified, check that one; otherwise check all Bitbucket hosts
+		repo = RepoSpec.fromStr(project)
+		if repo.host:
+			try:
+				hosts = [Host.fromDB(repo.host)]
+			except ValueError:
+				raise argparse.ArgumentTypeError(f"Invalid multipart repospec: no host named `{repo.host}'")
+			if not isinstance(hosts[0], BitbucketHost):
+				raise argparse.ArgumentTypeError(f"Unable to resolve multipart repospec: host `{repo.host}' is not a Bitbucket host")
+		else:
+			hosts = [host for host in map(Host.fromDB, db.hosts.keys()) if isinstance(host, BitbucketHost)]
+		specs = [f"{host.name}:{project}/{reponame}" for host in hosts for reponame in host.getReposInProject(project)]
+	else:
+		specs = [spec]
+	return map(type_repospec, specs)
 
 def makeGitEnvironment(hostname):
 	scriptExtension = '.bat' if platform.system() == 'Windows' else ''
@@ -123,6 +143,13 @@ def where(repo, format, on_uncloned, ensure_on_disk = True, dest = None):
 		r.head.reset(index = True, working_tree = True)
 	db.clones[str(repo)] = str(localPath)
 	return formatRtn(repo, str(localPath))
+
+# This is an adapter for command-line where mode. 'repos' comes from an argument of type 'multipart_repospec' with '+' nargs, so it's a list of lists of repospecs that needs to be flattened and passed to where() individually
+def whereCLI(repos, format, on_uncloned, ensure_on_disk = True, dest = None):
+	repos = [spec for l in repos for spec in l]
+	if dest is not None and len(repos) > 1:
+		raise ValueError("Can't specify a clone destination with multiple repospecs")
+	return [where(repo, format, on_uncloned, ensure_on_disk) for repo in repos]
 
 def here(repo, dir, force):
 	if dir == '-':
@@ -301,8 +328,8 @@ def getCredential(host):
 	username, password = credentials[host]
 	print(password)
 
-whereParser = makeMode('where', print_return(where), 'find the local path to a package, cloning it from a git host if necessary', ['local'])
-whereParser.add_argument('repo', type = type_repospec)
+whereParser = makeMode('where', print_return(whereCLI), 'find the local path to a package, cloning it from a git host if necessary', ['local'])
+whereParser.add_argument('repos', nargs = '+', type = type_multipart_repospec)
 whereParser.add_argument('--format', choices = ['plain', 'json'], default = 'plain')
 group = whereParser.add_mutually_exclusive_group()
 group.add_argument('--on-uncloned', choices = ['clone', 'skip', 'fail', 'fake'], default = 'clone', help = "what to do if the clone doesn't exist")

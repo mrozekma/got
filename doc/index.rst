@@ -187,7 +187,7 @@ The opposite of :ref:`--where <where>`, find the name of a repository from its p
 List local dependency paths
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Recursively list the paths to all the repositories the given repository depends on using ``--deps``. The argument is a :ref:`repospec <repospec>`. Dependencies come from a :ref:`dependency file <dependencies>`.
+Recursively list the paths to all the repositories the given repository depends on using ``--deps``. The argument is a :ref:`repospec <repospec>`. Dependencies come from a :ref:`dependency file <dependencies>`.  Each dependent repository will be fetched a single time, even when cycles exist in the dependency files.
 
 ::
 
@@ -298,7 +298,7 @@ See the :ref:`list of configuration keys <configuration>` for more information.
 Dependencies
 ------------
 
-A repository can declare a list of the repositories it depends on by listing their :ref:`repospecs <repospec>`, one per line, in a file named ``deps.got`` in the root of the repository. The :ref:`--deps <deps>` and :ref:`--git <git>` commands make use of the dependency list. An example can be found in the :ref:`--deps <deps>` documentation.
+A repository can declare a list of the repositories it depends on by listing their :ref:`repospecs <repospec>`, one per line, in a file named ``deps.got`` in the root of the repository. The :ref:`--deps <deps>` and :ref:`--git <git>` commands make use of the dependency list. An example can be found in the :ref:`--deps <deps>` documentation.  The operation will only occur a single time per repository when cycles exist in the dependency graph.
 
 .. _configuration:
 

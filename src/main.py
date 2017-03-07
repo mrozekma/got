@@ -247,8 +247,7 @@ def deps(repo):
 	stack = []
 	def visit(repo):
 		if repo in stack:
-			stack.append(repo)
-			raise RuntimeError(f"Dependency cycle: {' -> '.join(map(str, stack))}")
+			return
 		w = where(repo, 'plain', 'clone')
 		depsPath = Path(w) / 'deps.got'
 		if not depsPath.exists():

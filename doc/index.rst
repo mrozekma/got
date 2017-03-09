@@ -206,7 +206,7 @@ Since this operation is recursive and printing the path to a local clone will ca
 Run git command on a repo and its dependencies
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Run an arbitrary git command on a repository and the repositories it depends on using ``--git``. There is one optional argument, ``-C`` (or ``--directory``), to specify the starting repository path; if omitted the current working directory is used. All other arguments are passed through to ``git`` directly.
+Run an arbitrary git command on a repository and the repositories it depends on using ``--git``. There are two optional arguments. ``-C`` (or ``--directory``) can be used to specify the starting repository path; if omitted the current working directory is used. ``-i`` (or ``--ignore-errors``) can be used to continue on through the dependency tree if a particular git invocation fails; otherwise the first failure is a fatal error. All other arguments are passed through to ``git`` directly.
 
 ::
 

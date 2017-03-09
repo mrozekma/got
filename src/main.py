@@ -265,7 +265,7 @@ def deps(repo):
 	visit(repo)
 	return list(paths.values())
 
-def gitPassthrough(directory, args):
+def gitPassthrough(directory, ignore_errors, args):
 	if not args:
 		raise ValueError("No git command specified")
 	command, args = args[0], args[1:]
@@ -286,7 +286,8 @@ def gitPassthrough(directory, args):
 	depRepos = deps(RepoSpec.fromStr(rootRepo))
 
 	# Iterate over all of them
-	for name in [rootRepo] + list(map(what, depRepos)):
+	failed = 0
+	for name in list(map(what, depRepos)) + [rootRepo]:
 		spec = RepoSpec.fromStr(name)
 		repo = git.Repo(db.clones[name])
 		if spec.revision and repo.index.diff(None):
@@ -296,15 +297,25 @@ def gitPassthrough(directory, args):
 		else:
 			print(clr(name, bold = True))
 		with repo.git.custom_environment(**makeGitEnvironment(spec.host)):
-			if spec.revision:
-				if pinnedBehavior == 'skip':
-					continue
-				elif pinnedBehavior == 'reset':
-					repo.remotes['origin'].fetch()
-					repo.head.reset(spec.revision, hard = True)
-					continue
-			print(getattr(repo.git, command)(*args))
+			try:
+				if spec.revision:
+					if pinnedBehavior == 'skip':
+						continue
+					elif pinnedBehavior == 'reset':
+						repo.remotes['origin'].fetch()
+						repo.head.reset(spec.revision, hard = True)
+						continue
+				print(getattr(repo.git, command)(*args))
+			except git.exc.GitCommandError as e:
+				if ignore_errors:
+					failed += 1
+					print(f"Ignored error: {e}")
+				else:
+					raise e
 			print()
+
+	if failed:
+		print(clr(f"Command failed on {failed} {'repository' if failed == 1 else 'repositories'}", 'red'))
 
 def config(key, value):
 	if key is None:
@@ -382,6 +393,7 @@ depsParser.add_argument('repo', nargs = '?', type = type_repospec, default = Non
 
 gitParser = makeMode('git', gitPassthrough, 'run a git command on the repo and all its dependencies')
 gitParser.add_argument('-C', '--directory', metavar = 'DIR', default = '.', help = 'root directory')
+gitParser.add_argument('-i', '--ignore-errors', action = 'store_true', help = "don't stop if the git command fails")
 gitParser.add_argument('args', nargs = argparse.REMAINDER, help = 'arguments to pass to git')
 
 configParser = makeMode('config', config, 'get/set configuration key(s)')

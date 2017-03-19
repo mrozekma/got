@@ -44,8 +44,14 @@ def type_repospec(spec):
 		raise argparse.ArgumentTypeError(str(e))
 
 def type_multipart_repospec(spec):
+	# '@file' means read the specs from 'file'
+	if spec.startswith('@'):
+		path = Path(spec[1:])
+		if not path.exists():
+			raise argparse.ArgumentTypeError(f"File not found: {path}")
+		specs = path.read_text().strip().split('\n')
 	# 'project/*' is a special case for Bitbucket hosts
-	if spec.endswith('/*'):
+	elif spec.endswith('/*'):
 		project = spec[:-2]
 		# If a host is specified, check that one; otherwise check all Bitbucket hosts
 		repo = RepoSpec.fromStr(project)

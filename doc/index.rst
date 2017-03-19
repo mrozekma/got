@@ -102,12 +102,16 @@ For example::
 
 If you choose to automatically clone a missing repository, you can specify the destination directory with ``--dest``. If omitted, the directory will be chosen based on the :ref:`clone_root <configuration>`, host name, and repo name.
 
+------
+
+Certain extended repospec formats are available only in where mode:
+
 In the case of Bitbucket repositories, you can specify ``project/*`` as a shorthand for all repositories in the specified project. For example, if ``project`` contains two repositories, ``repo1`` and ``repo2``, then the following are equivalent::
 
     $ got 'project/*'
     $ got project/repo1 project/repo2
 
-This repospec shorthand is only valid in where mode, and only with Bitbucket hosts:
+This repospec shorthand is only valid with Bitbucket hosts:
 
 .. code-block:: text
    :emphasize-lines: 3
@@ -117,6 +121,13 @@ This repospec shorthand is only valid in where mode, and only with Bitbucket hos
     got --where: error: argument repos: Unable to resolve multipart repospec: host `host' is not a Bitbucket host
 
 If no host is specified, all registered Bitbucket hosts are searched for the specified project.
+
+------
+
+If a list of repospecs is contained within a file (for example, a :ref:`dependency file <dependencies>`), it can be referenced with the repospec ``@filename``. For example, if the file ``foo`` contains the lines ``project/repo1`` and ``project/repo2``, then the following are equivalent::
+
+   $ got @foo project/repo3
+   $ got project/repo1 project/repo2 project/repo3
 
 .. _mv:
 

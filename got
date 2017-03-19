@@ -4,10 +4,11 @@ if sys.version_info < (3, 6):
 	raise RuntimeError('Python 3.6+ required')
 
 import argparse
+import os
 parser = argparse.ArgumentParser(add_help = False)
 parser.add_argument('-v', '--verbose', action = 'store_true')
 args, _ = parser.parse_known_args()
-verbose = args.verbose
+verbose = args.verbose or ('GOT_VERBOSE' in os.environ)
 
 if __name__ == '__main__':
 	try:

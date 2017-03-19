@@ -12,7 +12,7 @@ where ``--foo --bar ...`` are mode-specific arguments.
 Verbosity
 ---------
 
-Pass ``--verbose`` (``-v``) to enable verbose output. In modes intended to be parsed by a script (:ref:`where <where>`, :ref:`whence <whence>`), the verbose information will be printed to stderr to keep it separate. In the event of an error, the backtrace that led to the error will be printed to stderr.
+Pass ``--verbose`` (``-v``), or set the environment variable ``GOT_VERBOSE``, to enable verbose output. In modes intended to be parsed by a script (:ref:`where <where>`, :ref:`whence <whence>`), the verbose information will be printed to stderr to keep it separate. In the event of an error, the backtrace that led to the error will be printed to stderr.
 
 .. role:: stderr-example
 

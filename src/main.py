@@ -433,7 +433,7 @@ parser.set_defaults(modeParser = whereParser)
 
 # First parse to isolate the mode; we get back a namespace containing 'modeParser' for the mode-specific parser, and a list of all the unprocessed arguments to pass on
 args, extraArgs = parser.parse_known_args()
-verbose = args.verbose
+verbose = args.verbose or ('GOT_VERBOSE' in os.environ)
 
 # Then use the mode-specific parser to do the real parse
 modeArgs = args.modeParser.parse_args(extraArgs)

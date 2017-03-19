@@ -2,10 +2,6 @@ import json
 import os
 from pathlib import Path
 
-DEFAULT_CONFIG = {
-	'clone_root': str(Path.home() / '.got' / 'repos'),
-}
-
 class DBFile:
 	def __init__(self, path, contains, secure = False, defaultData = {}):
 		self.path = path
@@ -54,7 +50,7 @@ class DBFile:
 
 class DB:
 	def __init__(self, dir = None):
-		self.dir = dir or (Path.home() / '.got')
+		self.dir = dir
 		if not self.dir.is_dir():
 			os.mkdir(self.dir)
 
@@ -64,4 +60,11 @@ class DB:
 		self.clones = DBFile(self.dir / 'clones.json', 'clone')
 		self.credentials = DBFile(self.dir / 'credentials.json', 'credential', secure = True)
 
-db = DB()
+gotRoot = os.environ.get('GOT_ROOT')
+gotRoot = Path(gotRoot) if gotRoot is not None else (Path.home() / '.got')
+
+DEFAULT_CONFIG = {
+	'clone_root': str(gotRoot / 'repos'),
+}
+
+db = DB(gotRoot)

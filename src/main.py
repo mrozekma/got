@@ -13,7 +13,7 @@ import subprocess
 import sys
 
 from .Credentials import credentials
-from .DB import db
+from .DB import db, gotRoot
 from .Host import Host, BitbucketHost
 from .RepoSpec import RepoSpec, HOST_PATTERN
 from .utils import clr, print_return
@@ -440,7 +440,7 @@ modeArgs = args.modeParser.parse_args(extraArgs)
 
 # Special case the lock for --get-credentials; it needs to run while got is already locked
 lockBase = 'creds-lock' if modeArgs.handler == getCredential else 'lock'
-lock = LockFile(str(Path.home() / '.got' / lockBase))
+lock = LockFile(str(gotRoot / lockBase))
 lockTimeout = False
 
 # And pass those args to the mode's handler (don't pass 'handler', it's not a real argument)

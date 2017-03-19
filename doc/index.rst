@@ -320,6 +320,13 @@ Get/set configuration keys with ``--config``. If a key and value are passed, the
 
 See the :ref:`list of configuration keys <configuration>` for more information.
 
+.. _got_root:
+
+Root storage directory
+~~~~~~~~~~~~~~~~~~~~~~
+
+By default Got stores its database and cloned repositories in a ``.got`` folder within your home directory. This can be overriden by the ``GOT_ROOT`` environment variable. This is useful if you maintain multiple independent builds on one host, particularly build machines.
+
 .. _dependencies:
 
 Dependencies
@@ -337,5 +344,5 @@ The following configuration keys can be read and written with :ref:`--config <co
 ========================= ============================== ================================================================================
 Key                       Default                        Description
 ========================= ============================== ================================================================================
-clone_root                ~/.got/repos                   Directory to store the cloned repositories in
+clone_root                <GOT_ROOT>/repos               Directory to store the cloned repositories in
 ========================= ============================== ================================================================================

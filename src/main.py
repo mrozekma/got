@@ -149,7 +149,7 @@ def whereCLI(repos, format, on_uncloned, ensure_on_disk = True, dest = None):
 	repos = [spec for l in repos for spec in l]
 	if dest is not None and len(repos) > 1:
 		raise ValueError("Can't specify a clone destination with multiple repospecs")
-	return [where(repo, format, on_uncloned, ensure_on_disk) for repo in repos]
+	return [where(repo, format, on_uncloned, ensure_on_disk, dest) for repo in repos]
 
 def here(repo, dir, force):
 	if dir == '-':
@@ -324,9 +324,8 @@ def config(key, value):
 	else:
 		if key not in db.config:
 			raise ValueError(f"Configuration key not found: {key}")
-		print(f"Key: {key}")
 		if value is None:
-			print(f"Value: {db.config[key]}")
+			print(db.config[key])
 		else:
 			print(f"Old value: {db.config[key]}")
 			db.config[key] = value

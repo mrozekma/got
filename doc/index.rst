@@ -182,6 +182,22 @@ The opposite of :ref:`--where <where>`, find the name of a repository from its p
    $ got --what ~/.got/repos/host/project/repo
    project/repo
 
+.. _find_root:
+
+Find a repository root
+~~~~~~~~~~~~~~~~~~~~~~
+
+Find the root of a got-tracked repository given a path within it using ``--find-root``. The argument is the path to start from, defaulting to the current directory.
+
+.. code-block:: text
+   :emphasize-lines: 5
+
+   $ got --find-root ~/.got/repos/host/project/repo/foo/bar/baz
+   ~/.got/repos/host/project/repo
+
+   $ got --find-root /dev/null
+   Fatal error: `/dev/null' is not within a got repository
+
 .. _deps:
 
 List local dependency paths

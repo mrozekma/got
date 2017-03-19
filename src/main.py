@@ -347,6 +347,14 @@ def mv(repospec, dest):
 	db.clones[str(repospec)] = str(dest)
 	print(f"{repospec} moved to {dest}")
 
+def findRoot(dir):
+	dirs = db.clones.values()
+	path = (Path(dir) if dir is not None else Path.cwd()).resolve()
+	for candidate in [str(path), *map(str, path.parents)]:
+		if candidate in dirs:
+			return candidate
+	raise RuntimeError(f"`{path}' is not within a got repository")
+
 def getCredential(host):
 	if host not in credentials:
 		raise ValueError(f"Unrecognized host: {host}")
@@ -402,6 +410,9 @@ configParser.add_argument('value', nargs = '?', help = 'value to set')
 mvParser = makeMode('mv', mv, 'move a cloned repository on disk')
 mvParser.add_argument('repospec', type = type_repospec)
 mvParser.add_argument('dest')
+
+findRootParser = makeMode('find-root', print_return(findRoot), 'find the root of a clone given a path within it')
+findRootParser.add_argument('dir', nargs = '?', default = None, help = 'directory to start from')
 
 # This is used by git-credential, it's not meant for direct user interaction
 getCredentialParser = makeMode('get-credential', getCredential, argparse.SUPPRESS)

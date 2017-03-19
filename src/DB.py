@@ -49,6 +49,9 @@ class DBFile:
 	def items(self):
 		return self.data.items()
 
+	def values(self):
+		return self.data.values()
+
 class DB:
 	def __init__(self, dir = None):
 		self.dir = dir or (Path.home() / '.got')

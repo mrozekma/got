@@ -171,13 +171,13 @@ def here(repo, dir, force):
 	if repo.host is None:
 		raise ValueError(f"{repo} does not specify the host; it should be of the form <host>:{repo}")
 
+	dir = Path(dir).resolve()
 	if not force:
 		existing = where(repo, 'py', 'skip')
 		if existing:
 			raise ValueError(f"{repo} is already mapped to {existing['path']}")
 		cloneUrl = Host.fromDB(repo.host).getCloneURL(repo.name)
 
-		dir = Path(dir).resolve()
 		if not dir.exists():
 			raise ValueError(f"Path not found: {dir}")
 		try:

@@ -61,7 +61,7 @@ class DB:
 		self.credentials = DBFile(self.dir / 'credentials.json', 'credential', secure = True)
 
 gotRoot = os.environ.get('GOT_ROOT')
-gotRoot = Path(gotRoot) if gotRoot is not None else (Path.home() / '.got')
+gotRoot = Path(gotRoot).resolve() if gotRoot is not None else (Path.home() / '.got')
 
 DEFAULT_CONFIG = {
 	'clone_root': str(gotRoot / 'repos'),

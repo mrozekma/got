@@ -1,1 +1,1 @@
-"%GOT_PYTHON%" "%GOT_SCRIPT%" --get-credential "%GOT_HOSTNAME%"
+@"%GOT_PYTHON%" "%GOT_SCRIPT%" --get-credential "%GOT_HOSTNAME%"

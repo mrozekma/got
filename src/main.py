@@ -6,7 +6,6 @@ import json
 from lockfile import LockFile, LockTimeout
 import os
 from pathlib import Path
-import platform
 import re
 import shutil
 import subprocess
@@ -16,7 +15,7 @@ from .Credentials import credentials
 from .DB import db, gotRoot
 from .Host import Host, BitbucketHost
 from .RepoSpec import RepoSpec, HOST_PATTERN
-from .utils import clr, print_return
+from .utils import clr, print_return, makeGitEnvironment
 
 parser = argparse.ArgumentParser(add_help = False)
 parser.add_argument('-v', '--verbose', action = 'store_true', help = 'verbose output')
@@ -68,15 +67,6 @@ def type_multipart_repospec(spec):
 	else:
 		specs = [spec]
 	return map(type_repospec, specs)
-
-def makeGitEnvironment(hostname):
-	scriptExtension = '.bat' if platform.system() == 'Windows' else ''
-	return {
-		'GIT_ASKPASS': str(Path(__file__).parent.parent / f"got-credential-helper{scriptExtension}"),
-		'GOT_PYTHON': sys.executable,
-		'GOT_SCRIPT': str(Path(__file__).parent.parent / 'got'),
-		'GOT_HOSTNAME': hostname,
-	}
 
 def findRepo(repospec):
 	# If the repospec specifies a host, check that one; otherwise check them all

@@ -1,10 +1,12 @@
 import abc
 import git
+import os
 import re
 import stashy
 
 from .Credentials import credentials
 from .DB import db
+from .utils import makeGitEnvironment
 
 class Host(abc.ABC):
 	def __new__(self, name, type, *args, **kw):
@@ -87,7 +89,13 @@ class DaemonHost:
 		# Nothing stops 'name' from escaping the path specified by self.url, like '../../../foo'. I can't see a problem with allowing it other than that it's weird, and allowing normal subdirectory traversal could be useful, so not currently putting any restrictions on 'name'
 		rtn = f"{self.url}/{name}"
 		try:
-			git.Git().ls_remote(rtn)
+			oldEnv = dict(os.environ)
+			os.environ.update(makeGitEnvironment(self.name))
+			try:
+				git.Git().ls_remote(rtn)
+			finally:
+				os.environ.clear()
+				os.environ.update(oldEnv)
 		except git.GitCommandError as e:
 			err = e.stderr
 			# Try to strip off the formatting GitCommandError puts on stderr

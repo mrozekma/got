@@ -48,7 +48,7 @@ Daemon
 
 ``--type=daemon``
 
-Daemon hosts are hosts running `git-daemon`. When a repository named ``<repo>`` is requested, Got will attempt to clone ``<url>/<repo>``. Note that daemon hosts aren't validated, so if you get the URL wrong all requests will just fail, which Got will interpret as the host not having a repository by that name.
+Daemon hosts are hosts running `git-daemon`. When a repository named ``<repo>`` is requested, Got will attempt to clone ``<url>/<repo>``. Note that daemon hosts aren't validated, so if you get the URL wrong all requests will just fail, which Got will interpret as the host not having a repository by that name. If the repository is authenticated, you probably want a URL of the form ``https://username@host``, even though got takes the username separately.
 
 Modes
 -----

@@ -1,3 +1,5 @@
+from pathlib import Path
+import platform
 import re
 import sys
 import types
@@ -43,3 +45,12 @@ def clr(str, fg = None, bg = None, bold = True):
 
 def clrSpecifier(color, isForeground = True, bold = True):
 	return "\033[%d;%dm" % (1 if bold else 0, colors[color] + (0 if isForeground else 10))
+
+def makeGitEnvironment(hostname):
+	scriptExtension = '.bat' if platform.system() == 'Windows' else ''
+	return {
+		'GIT_ASKPASS': str(Path(__file__).parent.parent / f"got-credential-helper{scriptExtension}"),
+		'GOT_PYTHON': sys.executable,
+		'GOT_SCRIPT': str(Path(__file__).parent.parent / 'got'),
+		'GOT_HOSTNAME': hostname,
+	}

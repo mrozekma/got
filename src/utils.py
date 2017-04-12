@@ -7,16 +7,20 @@ import types
 from colorama import init as coloramaInit
 coloramaInit()
 
-# Functions decorated with this will have their stdout redirected to stderr, and their return value printed to stdout
+# Functions decorated with this will have their stdout redirected to stderr, and their return value printed to outputFile (stdout if none supplied)
 def print_return(f):
-	def wrap(*args, **kw):
+	def wrap(outputFile = None, *args, **kw):
 		oldStdout, sys.stdout = sys.stdout, sys.stderr
+		if(outputFile == None):
+			outputFile = oldStdout
+		elif(isinstance(outputFile, str)):
+			outputFile = open(outputFile, 'w')
 		try:
 			ret = f(*args, **kw)
 			if ret is not None:
 				if isinstance(ret, list) or isinstance(ret, types.GeneratorType):
 					ret = '\n'.join(ret)
-				print(ret, file = oldStdout)
+				print(ret, file = outputFile)
 		finally:
 			sys.stdout = oldStdout
 	return wrap

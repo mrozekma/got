@@ -8,6 +8,7 @@ for /F "usebackq tokens=3*" %%A IN (`REG QUERY "HKCU\Software\Python\PythonCore\
 )
 
 "%PYTHON_DIR%\python" "%~dp0\got" %*
+set GOTERR=%ERRORLEVEL%
 goto end
 
 :trysixtyfourbit
@@ -20,8 +21,11 @@ for /F "usebackq tokens=3*" %%A IN (`REG QUERY "HKCU\Software\Python\PythonCore\
 )
 
 "%PYTHON_DIR%\python" "%~dp0\got" %*
+set GOTERR=%ERRORLEVEL%
 goto end
 
 :fail
 echo Unable to find Python 3.6 in the registry
 :end
+
+exit /B %GOTERR%

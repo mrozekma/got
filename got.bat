@@ -26,6 +26,7 @@ goto end
 
 :fail
 echo Unable to find Python 3.6 in the registry
+set GOTERR=2
 :end
 
 exit /B %GOTERR%

@@ -57,6 +57,7 @@ def makeGitEnvironment(hostname):
 	scriptExtension = '.bat' if platform.system() == 'Windows' else ''
 	return {
 		'GIT_ASKPASS': str(Path(__file__).parent.parent / f"got-credential-helper{scriptExtension}"),
+		'GIT_CONFIG_NOSYSTEM': 'true',
 		'GOT_PYTHON': sys.executable,
 		'GOT_SCRIPT': str(Path(__file__).parent.parent / 'got'),
 		'GOT_HOSTNAME': hostname,

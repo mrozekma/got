@@ -23,6 +23,8 @@ def print_return(f):
 				print(ret, file = outputFile)
 		finally:
 			sys.stdout = oldStdout
+			if(outputFile):
+				outputFile.close()
 	return wrap
 
 colorPattern = re.compile("\033\\[[0-9]+;[0-9]+m")

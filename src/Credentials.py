@@ -14,7 +14,7 @@ class DBKeyring(keyring.backend.KeyringBackend):
 		db.credentials[service]['password'] = password
 		db.credentials.save()
 
-	def delete_password(self, service, username, password):
+	def delete_password(self, service, username):
 		if service in db.credentials:
 			db.credentials[service]['password'] = None
 			db.credentials.save()

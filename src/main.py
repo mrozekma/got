@@ -229,7 +229,13 @@ def rmHost(name):
 	if name not in db.hosts:
 		raise RuntimeError(f"Unknown host `{name}'")
 	del db.hosts[name]
+	del credentials[name]
 	print(f"Removed host {name}")
+	clones = [spec for spec in db.clones.keys() if RepoSpec.fromStr(spec).host == name]
+	if clones:
+		for spec in clones:
+			del db.clones[spec]
+		print(f"Unregistered {len(clones)} {'clone' if len(clones) == 1 else 'clones'}")
 
 def deps(repo):
 	if repo is None:

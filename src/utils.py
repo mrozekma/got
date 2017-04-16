@@ -9,22 +9,20 @@ coloramaInit()
 
 # Functions decorated with this will have their stdout redirected to stderr, and their return value printed to outputFile (stdout if none supplied)
 def print_return(f):
-	def wrap(outputFile = None, *args, **kw):
+	def wrap(*, outputFile = sys.stdout, **kw):
 		oldStdout, sys.stdout = sys.stdout, sys.stderr
-		if(outputFile == None):
-			outputFile = oldStdout
-		elif(isinstance(outputFile, str)):
-			outputFile = open(outputFile, 'w')
+		if isinstance(outputFile, str):
+			with open(outputFile, 'w') as fp:
+				return wrap(fp, *args, **kw)
+
 		try:
-			ret = f(*args, **kw)
+			ret = f(**kw)
 			if ret is not None:
 				if isinstance(ret, list) or isinstance(ret, types.GeneratorType):
 					ret = '\n'.join(ret)
 				print(ret, file = outputFile)
 		finally:
 			sys.stdout = oldStdout
-			if(outputFile):
-				outputFile.close()
 	return wrap
 
 colorPattern = re.compile("\033\\[[0-9]+;[0-9]+m")

@@ -47,8 +47,8 @@ class BitbucketHost:
 			self.conn.projects.list()
 		except stashy.errors.NotFoundException:
 			raise ConnectionError("Unable to connect to Bitbucket")
-		except stashy.errors.AuthenticationException:
-			raise ConnectionError("Invalid/insufficient credentials")
+		except stashy.errors.AuthenticationException as e:
+			raise ConnectionError(str(e))
 
 	def getCloneURL(self, repoPath):
 		try:
@@ -60,8 +60,8 @@ class BitbucketHost:
 			data = self.conn.projects[project].repos[repoName].get()
 		except stashy.errors.NotFoundException as e:
 			raise ConnectionError(str(e))
-		except stashy.errors.AuthenticationException:
-			raise ConnectionError("Invalid/insufficient credentials")
+		except stashy.errors.AuthenticationException as e:
+			raise ConnectionError(str(e))
 
 		if data['scmId'] != 'git':
 			raise RuntimeError("{repoPath} is not a git repository ({data['scmId']})")
@@ -107,3 +107,12 @@ class DaemonHost:
 				err = match.group(1)
 			raise RuntimeError(err)
 		return rtn
+
+# Patch stashy's AuthenticationException to print the server's message (mostly for issue #16, detecting a captcha check)
+def init(self, response, *, oldInit = stashy.errors.AuthenticationException.__init__):
+	try:
+		Exception.__init__(self, response.json()['errors'][0]['message'].split('\n')[0])
+	except Exception:
+		oldInit(self, response)
+stashy.errors.AuthenticationException.__init__ = init
+del init

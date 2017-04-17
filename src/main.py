@@ -69,6 +69,11 @@ def type_multipart_repospec(spec):
 	return map(type_repospec, specs)
 
 def findRepo(repospec):
+	if not db.hosts.keys():
+		if verbose:
+			print("No hosts registered -- add one with --add-host")
+		return None, None
+
 	# If the repospec specifies a host, check that one; otherwise check them all
 	hosts = [repospec.host] if repospec.host else db.hosts.keys()
 	for hostname in hosts:

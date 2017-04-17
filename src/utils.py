@@ -17,10 +17,9 @@ def print_return(f):
 
 		try:
 			ret = f(**kw)
-			if ret is not None:
-				if isinstance(ret, list) or isinstance(ret, types.GeneratorType):
-					ret = '\n'.join(ret)
-				print(ret, file = outputFile)
+			if isinstance(ret, list) or isinstance(ret, types.GeneratorType):
+				ret = '\n'.join(e for e in ret if e)
+			print(ret, file = outputFile)
 		finally:
 			sys.stdout = oldStdout
 	return wrap

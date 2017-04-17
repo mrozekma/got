@@ -508,6 +508,8 @@ while not lock.i_am_locking():
 			lockTimeout = True
 			if verbose:
 				print("Waiting for lock... (pass --unlock if the lock is stale)", file = sys.stderr)
+
+db.load()
 try:
 	modeArgs.handler(**{k: v for k, v in vars(modeArgs).items() if k != 'handler'})
 finally:

@@ -17,6 +17,7 @@ class Host(abc.ABC):
 		else:
 			raise ValueError(f"Unknown type `{type}'")
 		rtn.name = name
+		rtn.type = type
 		return rtn
 
 	@abc.abstractmethod
@@ -37,6 +38,8 @@ class Host(abc.ABC):
 class BitbucketHost:
 	def __init__(self, url, username, password):
 		self.url = url.rstrip('/')
+		self.username = username
+		self.password = password
 		self.conn = stashy.connect(url, username, password)
 
 		# Test connection

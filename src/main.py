@@ -199,9 +199,14 @@ def whence(repo, format):
 
 def showHosts(format):
 	if format == 'plain':
-		print(clr(f"{'Name':30} {'Type':20} URL", bold = True))
+		print(clr(f"    {'Name':30} {'Type':20} URL", bold = True))
 		for name, host in sorted(db.hosts.items()):
-			print(f"{name:30} {host['type']:20} {host['url']}")
+			try:
+				Host.fromDB(name)
+				valid = True
+			except Exception:
+				valid = False
+			print(f"{'   ' if valid else clr('(!)', 'red')} {name:30} {host['type']:20} {host['url']}")
 	elif format == 'json':
 		print(db.hosts.getJSON())
 
@@ -224,6 +229,46 @@ def addHost(name, url, type, username, password, force):
 	db.hosts[name] = {'type': type, 'url': url}
 	credentials[name] = username, password
 	print(f"Added {type} host {name} at {url}")
+
+def editHost(name, new_url, new_username, new_password, force):
+	if not name in db.hosts:
+		raise ValueError(f"No host named {name}")
+	print(f"Editing host: {name}")
+
+	if new_password == '-':
+		new_password = getpass()
+
+	# Mutable fields
+	fields = [
+		('url', db.hosts[name]['url'], new_url),
+		('username', credentials[name][0], new_username),
+		('password', credentials[name][1], new_password),
+	]
+	# Immutable fields
+	kw = {
+		'name': name,
+		'type': db.hosts[name]['type'],
+	}
+
+	for (field, oldVal, newVal) in fields:
+		if newVal:
+			kw[field] = newVal
+			print(f"  New {field}: {'***' if field == 'password' else newVal}")
+			if field == 'url':
+				print("    Warning: Existing clones will still point to the old remote URL")
+		else:
+			kw[field] = oldVal
+
+	try:
+		Host(**kw)
+	except ConnectionError as e:
+		if force:
+			print(f"Host error (editing anyway): {e}")
+		else:
+			raise ConnectionError(f"Unable to edit host: {e}")
+
+	db.hosts[kw['name']] = {'type': kw['type'], 'url': kw['url']}
+	credentials[kw['name']] = kw['username'], kw['password']
 
 def rmHost(name):
 	if name not in db.hosts:
@@ -394,6 +439,13 @@ addHostParser.add_argument('-t', '--type', choices = ['bitbucket', 'daemon'], de
 addHostParser.add_argument('-u', '--username', default = '', help = 'login username')
 addHostParser.add_argument('-p', '--password', nargs = '?', default = '', const = '-', help = "login password (empty or '-' to prompt)")
 addHostParser.add_argument('--force', action = 'store_true', help = 'add the host even if a connection cannot be established')
+
+editHostParser = makeMode('edit-host', editHost, 'edit a registered git host')
+editHostParser.add_argument('name', type = type_host_name)
+editHostParser.add_argument('--new-url', metavar = 'URL')
+editHostParser.add_argument('--new-username', metavar = 'USERNAME')
+editHostParser.add_argument('--new-password', nargs = '?', const = '-', metavar = 'PASSWORD')
+editHostParser.add_argument('--force', action = 'store_true')
 
 rmHostParser = makeMode('rm-host', rmHost, 'remove a registered git host')
 rmHostParser.add_argument('name', type = type_host_name)

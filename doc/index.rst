@@ -300,6 +300,15 @@ Argument                  Type       Description
    Name                           Type                 URL
    my-bitbucket                   bitbucket            http://localhost:7990/
 
+.. _edit-host:
+
+Edit host
+~~~~~~~~~
+
+Edit an existing host with ``--edit-host``. The arguments are similar to :ref:`--add-host <add-host>`; ``name`` is mandatory to specify the host, and ``--force`` optionally forces the edit even if unable to connect, just as when adding a host. ``--new-url``, ``--new-username``, and ``--new-password`` all modify the corresponding fields.
+
+Note that when changing the URL, any existing clones from that host are left unchanged, so their remote URLs aren't updated.
+
 .. _rm-host:
 
 Remove host

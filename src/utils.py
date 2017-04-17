@@ -13,7 +13,7 @@ def print_return(f):
 		oldStdout, sys.stdout = sys.stdout, sys.stderr
 		if isinstance(outputFile, str):
 			with open(outputFile, 'w') as fp:
-				return wrap(fp, *args, **kw)
+				return wrap(outputFile = fp, **kw)
 
 		try:
 			ret = f(**kw)

@@ -9,11 +9,13 @@ coloramaInit()
 
 # Functions decorated with this will have their stdout redirected to stderr, and their return value printed to outputFile (stdout if none supplied)
 def print_return(f):
-	def wrap(*, outputFile = sys.stdout, **kw):
-		oldStdout, sys.stdout = sys.stdout, sys.stderr
+	def wrap(*, outputFile = None, **kw):
+		if(not outputFile):
+			outputFile = sys.stdout
 		if isinstance(outputFile, str):
 			with open(outputFile, 'w') as fp:
 				return wrap(outputFile = fp, **kw)
+		oldStdout, sys.stdout = sys.stdout, sys.stderr
 
 		try:
 			ret = f(**kw)

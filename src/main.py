@@ -15,7 +15,7 @@ from .Credentials import credentials
 from .DB import db, gotRoot
 from .Host import Host, BitbucketHost
 from .RepoSpec import RepoSpec, HOST_PATTERN
-from .utils import clr, print_return, makeGitEnvironment
+from .utils import print_return, makeGitEnvironment
 
 parser = argparse.ArgumentParser(add_help = False)
 parser.add_argument('-v', '--verbose', action = 'store_true', help = 'verbose output')
@@ -204,14 +204,14 @@ def whence(repo, format):
 
 def showHosts(format):
 	if format == 'plain':
-		print(clr(f"    {'Name':30} {'Type':20} URL", bold = True))
+		print(f"    {'Name':30} {'Type':20} URL")
 		for name, host in sorted(db.hosts.items()):
 			try:
 				Host.fromDB(name)
 				valid = True
 			except Exception:
 				valid = False
-			print(f"{'   ' if valid else clr('(!)', 'red')} {name:30} {host['type']:20} {host['url']}")
+			print(f"{'   ' if valid else '(!)'} {name:30} {host['type']:20} {host['url']}")
 	elif format == 'json':
 		print(db.hosts.getJSON())
 
@@ -343,11 +343,11 @@ def gitPassthrough(directory, ignore_errors, args):
 		spec = RepoSpec.fromStr(name)
 		repo = git.Repo(db.clones[name])
 		if spec.revision and repo.index.diff(None):
-			print(f"{clr(name, bold = True)}: Unexpected changes in version-pinned repository")
+			print(f"{name}: Unexpected changes in version-pinned repository")
 		elif spec.revision and repo.commit(spec.revision) != repo.head.commit:
-			print(f"{clr(name, bold = True)}: Wrong HEAD in version-pinned repository")
+			print(f"{name}: Wrong HEAD in version-pinned repository")
 		else:
-			print(clr(name, bold = True))
+			print(name)
 		with repo.git.custom_environment(**makeGitEnvironment(spec.host)):
 			try:
 				if spec.revision:
@@ -367,7 +367,7 @@ def gitPassthrough(directory, ignore_errors, args):
 			print()
 
 	if failed:
-		print(clr(f"Command failed on {failed} {'repository' if failed == 1 else 'repositories'}", 'red'))
+		print(f"Command failed on {failed} {'repository' if failed == 1 else 'repositories'}")
 
 def config(key, value):
 	if key is None:

@@ -416,7 +416,8 @@ def getCredential(host):
 whereParser = makeMode('where', print_return(whereCLI), 'find the local path to a package, cloning it from a git host if necessary', ['local'])
 whereParser.add_argument('repos', nargs = '+', type = type_multipart_repospec)
 whereParser.add_argument('--format', choices = ['plain', 'json'], default = 'plain')
-whereParser.add_argument('--outputFile', default = None, help = 'optional file to hold the results rather than stdout')
+whereParser.add_argument('-o', '--output-file', dest = 'outputFile', metavar = 'FILE', default = sys.stdout, help = 'optional file to hold the results rather than stdout')
+whereParser.add_argument('--outputFile', help = argparse.SUPPRESS) # backwards-compatible version of --output-file
 group = whereParser.add_mutually_exclusive_group()
 group.add_argument('--on-uncloned', choices = ['clone', 'skip', 'fail', 'fake'], default = 'clone', help = "what to do if the clone doesn't exist")
 group.add_argument('--no-clone', action = 'store_const', dest = 'on_uncloned', const = 'skip', help = argparse.SUPPRESS) # backwards-compatibility version of --on-uncloned=skip

@@ -430,7 +430,7 @@ whereParser.add_argument('-d', '--dest', nargs = '?', default = None, help = 'wh
 
 hereParser = makeMode('here', here, 'set the local path of a package')
 hereParser.add_argument('repo', type = type_repospec)
-hereParser.add_argument('dir', help = 'local path to set, or - to clear')
+hereParser.add_argument('dir', nargs = '?', default = '.', help = 'local path to set, or - to clear')
 hereParser.add_argument('-f', '--force', action = 'store_true', help = 'register the path even if a record exists or the specified directory is invalid')
 
 whatParser = makeMode('what', print_return(what), 'find the package name of a local clone')

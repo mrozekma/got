@@ -17,10 +17,24 @@ from .Host import Host, BitbucketHost
 from .RepoSpec import RepoSpec, HOST_PATTERN
 from .utils import print_return, makeGitEnvironment
 
+class DeprecatedAction(argparse.Action):
+	def __init__(self, option_strings, dest, why = None, **kw):
+		if 'nargs' not in kw:
+			kw['nargs'] = 0
+		if 'help' not in kw:
+			kw['help'] = argparse.SUPPRESS
+		super().__init__(option_strings, '__deprecated__', **kw)
+		self.why = why
+
+	def __call__(self, parser, namespace, values, option_string = None):
+		if option_string:
+			print(f"Warning: {option_string} is deprecated" + (f": {self.why}" if self.why else ''), file = sys.stderr)
+
 parser = argparse.ArgumentParser(add_help = False)
-parser.add_argument('-v', '--verbose', action = 'store_true', help = 'verbose output')
+parser.add_argument('-v', '--verbose', action = DeprecatedAction, why = 'verbose output is enabled by default')
+parser.add_argument('-q', '--quiet', action = 'store_true', help = "don't output verbose information to stderr")
 parser.add_argument('--unlock', action = 'store_true', help = 'remove the lockfile if it exists')
-verbose = False
+verbose = True
 
 modeGroup = parser.add_mutually_exclusive_group()
 def makeMode(name, handler, desc, aliases = []):
@@ -488,7 +502,7 @@ parser.set_defaults(modeParser = whereParser)
 
 # First parse to isolate the mode; we get back a namespace containing 'modeParser' for the mode-specific parser, and a list of all the unprocessed arguments to pass on
 args, extraArgs = parser.parse_known_args()
-verbose = args.verbose or ('GOT_VERBOSE' in os.environ)
+verbose = not (args.quiet or ('GOT_QUIET' in os.environ))
 
 # Then use the mode-specific parser to do the real parse
 modeArgs = args.modeParser.parse_args(extraArgs)

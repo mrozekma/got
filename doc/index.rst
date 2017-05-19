@@ -5,14 +5,16 @@ Got is a utility to clone and manage a set of interdependent git repositories. B
 
 Got has a number of different modes. In general the usage is::
 
-   $ got [-v | --verbose] [--mode] --foo --bar ...
+   $ got [-q | --quiet] [--mode] --foo --bar ...
 
 where ``--foo --bar ...`` are mode-specific arguments.
 
 Verbosity
 ---------
 
-Pass ``--verbose`` (``-v``), or set the environment variable ``GOT_VERBOSE``, to enable verbose output. In modes intended to be parsed by a script (:ref:`where <where>`, :ref:`whence <whence>`), the verbose information will be printed to stderr to keep it separate. In the event of an error, the backtrace that led to the error will be printed to stderr.
+In modes intended to be parsed by a script (:ref:`where <where>`, :ref:`whence <whence>`), verbose information is printed to stderr to keep it separate. In the event of an error, the backtrace that led to the error will be printed to stderr.
+
+To disable this functionality (for example, if the platform calling got combines stdout and stderr into one stream), pass ``--quiet`` (``-q``), or set the environment variable ``GOT_QUIET``.
 
 .. role:: stderr-example
 
@@ -69,7 +71,7 @@ The argument is one or more :ref:`repospecs <repospec>`. Got will output the loc
 .. code-block:: text
    :emphasize-lines: 2-5
 
-   $ got -v project/repo project/repo2
+   $ got project/repo project/repo2
    No local clone on record
    Cloning http://user@localhost:7990/scm/project/repo.git to ~/.got/repos/host/project/repo
    No local clone on record
@@ -79,7 +81,7 @@ The argument is one or more :ref:`repospecs <repospec>`. Got will output the loc
 
 Future calls will remember the path to the repository and simply output it::
 
-   $ got -v project/repo
+   $ got project/repo
    ~/.got/repos/host/project/repo
 
 Note that in order to automatically clone repositories, you need to :ref:`add hosts <add-host>` for Got to search.
@@ -177,7 +179,7 @@ Find which host provides a given repository, without actually cloning it, using 
    $ got --whence project/bad-repo
 
 
-   $ got -v --whence project/bad-repo
+   $ got --whence project/bad-repo
    my-bitbucket: Repository project/bad-repo does not exist
    No valid host has a record of the requested repository
 

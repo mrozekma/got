@@ -301,35 +301,30 @@ def rmHost(name):
 			del db.clones[spec]
 		print(f"Unregistered {len(clones)} {'clone' if len(clones) == 1 else 'clones'}")
 
-def deps(repo):
-	if repo is None:
+def iterDeps(spec):
+	if spec is None:
 		spec = what(None)
 		if spec is None:
 			print("Current directory is not a tracked repository")
 			return
-		repo = RepoSpec.fromStr(spec)
 
-	paths = OrderedDict()
-	stack = []
-	def visit(repo):
-		if repo in stack:
-			return
+	seen = set()
+	worklist = [spec]
+	while worklist:
+		spec = worklist.pop(0)
+		repo = RepoSpec.fromStr(spec)
 		w = where(repo, 'plain', 'clone')
+		seen.add(spec)
+		yield repo, w
+
 		depsPath = Path(w) / 'deps.got'
-		if not depsPath.exists():
-			if not stack: # This is the first repo, the one the user specified
-				print(f"{repo} has no dependencies file ({depsPath})")
-			return w
-		stack.append(repo)
-		for depSpec in depsPath.read_text().split('\n'):
-			if depSpec:
-				depSpec = RepoSpec.fromStr(depSpec)
-				if depSpec not in paths:
-					paths[depSpec] = visit(depSpec)
-		stack.pop()
-		return w
-	visit(repo)
-	return list(paths.values())
+		if depsPath.exists():
+			worklist += [depSpec for depSpec in depsPath.read_text().split() if depSpec not in seen]
+		elif len(seen) == 1: # This is the first repo, the one the user specified
+			print(f"{repo} has no dependencies file ({depsPath})")
+
+def deps(repo):
+	return list(str(depRepo) for depRepo, w in iterDeps(None if repo is None else str(repo)))
 
 def gitPassthrough(directory, ignore_errors, args):
 	if not args:
@@ -348,20 +343,16 @@ def gitPassthrough(directory, ignore_errors, args):
 	if rootRepo is None:
 		raise RuntimeError(f"Not a got repository: {Path(directory).resolve()}")
 
-	# And the dependencies
-	depRepos = deps(RepoSpec.fromStr(rootRepo))
-
-	# Iterate over all of them
+	# Iterate over the root repo and its dependencies
 	failed = 0
-	for name in list(map(what, depRepos)) + [rootRepo]:
-		spec = RepoSpec.fromStr(name)
-		repo = git.Repo(db.clones[name])
+	for spec, w in iterDeps(rootRepo):
+		repo = git.Repo(w)
 		if spec.revision and repo.index.diff(None):
-			print(f"{name}: Unexpected changes in version-pinned repository")
+			print(f"{spec}: Unexpected changes in version-pinned repository")
 		elif spec.revision and repo.commit(spec.revision) != repo.head.commit:
-			print(f"{name}: Wrong HEAD in version-pinned repository")
+			print(f"{spec}: Wrong HEAD in version-pinned repository")
 		else:
-			print(name)
+			print(spec)
 		with repo.git.custom_environment(**makeGitEnvironment(spec.host)):
 			try:
 				if spec.revision:

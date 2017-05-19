@@ -255,6 +255,8 @@ Run an arbitrary git command on a repository and the repositories it depends on 
    Your branch is up-to-date with 'origin/master'.
    nothing to commit, working directory clean
 
+The specified git command is run on a given repository before its dependencies are read, so if the command changes the repo's ``deps.got`` file, those changes will take effect immediately.
+
 Repositories pinned to a particular version are treated specially in this mode. Since these repositories are expected to remain static, a warning is printed if there are any uncommitted changes or if the repository's head no longer points to the pinned version. Got won't attempt to fix this, but you should look into it manually to figure out why the repository is in the wrong state. To help prevent this situation, certain git commands are treated specially when run on pinned repositories:
 
 ============  ================================================================================
@@ -263,7 +265,6 @@ Command       Pinned behavior
 commit, push  The repository is skipped; no command is run
 fetch, pull   Commits are fetched from the origin and head is hard-reset to the pinned version
 ============  ================================================================================
-
 
 .. _hosts:
 

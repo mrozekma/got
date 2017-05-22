@@ -312,6 +312,8 @@ def iterDeps(spec):
 	worklist = [spec]
 	while worklist:
 		spec = worklist.pop(0)
+		if spec in seen:
+			continue
 		repo = RepoSpec.fromStr(spec)
 		w = where(repo, 'py', 'clone')
 		seen.add(spec)

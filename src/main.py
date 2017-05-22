@@ -313,11 +313,11 @@ def iterDeps(spec):
 	while worklist:
 		spec = worklist.pop(0)
 		repo = RepoSpec.fromStr(spec)
-		w = where(repo, 'plain', 'clone')
+		w = where(repo, 'py', 'clone')
 		seen.add(spec)
-		yield repo, w
+		yield w['repospec'], w['path']
 
-		depsPath = Path(w) / 'deps.got'
+		depsPath = Path(w['path']) / 'deps.got'
 		if depsPath.exists():
 			worklist += [depSpec for depSpec in depsPath.read_text().split() if depSpec not in seen]
 		elif len(seen) == 1: # This is the first repo, the one the user specified

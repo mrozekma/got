@@ -358,3 +358,33 @@ Key                       Default                        Description
 ========================= ============================== ================================================================================
 clone_root                <GOT_ROOT>/repos               Directory to store the cloned repositories in
 ========================= ============================== ================================================================================
+
+Emacs integration
+-----------------
+
+Here is an emacs function that takes a repospec and returns the corresponding local clone path:
+
+.. code-block:: elisp
+
+   (defun got-lookup (repospec)
+     (with-temp-buffer
+      (let ((ret (call-process "got"
+                               nil
+                               (current-buffer)
+                               nil
+                               "-q"
+                               (shell-quote-argument repospec)))
+            (stdout (replace-regexp-in-string "\n\\'" "" (buffer-string))))
+        (if (zerop ret)
+          (format "%s/" stdout)
+          (error "Got lookup failed: %s" stdout)))))
+
+One way to use this function is by binding a find-file hotkey to read the repospec from a minibuffer and paste the resulting path into the find-file prompt:
+
+.. code-block:: elisp
+
+   (define-key minibuffer-local-filename-completion-map (kbd "@") (lambda () (interactive) (insert (got-lookup (read-from-minibuffer "Got: ")))))
+
+As demonstrated here:
+
+.. image:: emacs.gif

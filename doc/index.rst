@@ -213,22 +213,43 @@ Find the root of a got-tracked repository given a path within it using ``--find-
 
 .. _deps:
 
-List local dependency paths
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+List local dependency info
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Recursively list the paths to all the repositories the given repository depends on using ``--deps``. The argument is a :ref:`repospec <repospec>`. Dependencies come from a :ref:`dependency file <dependencies>`.  Each dependent repository will be fetched a single time, even when cycles exist in the dependency files.
+Recursively list information about all the repositories the given repository depends on using ``--deps``. The arguments are an optional :ref:`repospec <repospec>` and format for the information to take. By default the current repository is used, and the format is ``%p``. Dependencies come from a :ref:`dependency file <dependencies>`.  Each dependent repository will be fetched a single time, even when cycles exist in the dependency files.
 
-::
+The format specifier loosely models the "pretty formats" used by commands like `git show` and `git log`. The following placeholders are available:
+
+=========== ========================================== ========================================
+Placeholder Description                                Example
+=========== ========================================== ========================================
+``%H``      Hash of the current head                   4b825dc642cb6eb9a060e54bf8d69288fbee4904
+``%h``      Short hash of the current head             4b825dc
+``%RS``     Repospec                                   my-bitbucket:project/repo@master
+``%rs``     Abbreviated repospec (no host or revision) project/repo
+``%p``      Path                                       ~/.got/repos/host/project/repo
+=========== ========================================== ========================================
+
+For example::
 
    $ cat $(got project/repo)/deps.got
+   project/repo
    project/repo2
    project/repo3
 
    $ got --deps project/repo
+   ~/.got/repos/host/project/repo
    ~/.got/repos/host/project/repo2
    ~/.got/repos/host/project/repo3
 
-Since this operation is recursive and printing the path to a local clone will cause it to be cloned if not already, running ``--deps`` on a given repospec will ensure that all dependent repos down the tree exist on disk.
+   $ got --deps project/repo --format "%rs's short hash is %h"
+   project/repo's short hash is dbbc5d8
+   project/repo2's short hash is 10bac04
+   project/repo3's short hash is a34a873
+
+Since this operation is recursive and fetching clone information causes it to be cloned if not already, running ``--deps`` on a given repospec will ensure that all dependent repos down the tree exist on disk.
+
+Note that the current repository is included in the output, as many use cases involve operating on the repository as well as its dependencies.
 
 .. _git:
 

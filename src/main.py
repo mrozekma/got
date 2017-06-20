@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import string
 import subprocess
 import sys
 
@@ -35,6 +36,9 @@ parser.add_argument('-v', '--verbose', action = DeprecatedAction, why = 'verbose
 parser.add_argument('-q', '--quiet', action = 'store_true', help = "don't output verbose information to stderr")
 parser.add_argument('--unlock', action = 'store_true', help = 'remove the lockfile if it exists')
 verbose = True
+
+class Template(string.Template):
+	delimiter = '%'
 
 modeGroup = parser.add_mutually_exclusive_group()
 def makeMode(name, handler, desc, aliases = []):
@@ -322,8 +326,23 @@ def iterDeps(spec):
 		elif len(seen) == 1: # This is the first repo, the one the user specified
 			print(f"{repo} has no dependencies file ({depsPath})")
 
-def deps(repo):
-	return list(str(depRepo) for depRepo, w in iterDeps(None if repo is None else str(repo)))
+def deps(repo, format):
+	t = Template(format)
+	for repospec, path in iterDeps(None if repo is None else str(repo)):
+		try:
+			hexsha = git.Repo(path).head.commit.hexsha
+		except:
+			hexsha = '0' * 40
+		try:
+			yield t.substitute(
+				H = hexsha,
+				h = hexsha[:7],
+				RS = repospec.str(),
+				rs = repospec.str(False, False),
+				p = path,
+			)
+		except KeyError as e:
+			raise ValueError("Invalid format string specifier: %s" % e)
 
 def gitPassthrough(directory, ignore_errors, args):
 	if not args:
@@ -460,8 +479,9 @@ editHostParser.add_argument('--force', action = 'store_true')
 rmHostParser = makeMode('rm-host', rmHost, 'remove a registered git host')
 rmHostParser.add_argument('name', type = type_host_name)
 
-depsParser = makeMode('deps', print_return(deps), 'list local paths of all dependencies')
+depsParser = makeMode('deps', print_return(deps), "list information about a repo's dependencies")
 depsParser.add_argument('repo', nargs = '?', type = type_repospec, default = None)
+depsParser.add_argument('--format', default = '%p', help = 'Format to display each line in')
 
 gitParser = makeMode('git', gitPassthrough, 'run a git command on the repo and all its dependencies')
 gitParser.add_argument('-C', '--directory', metavar = 'DIR', default = '.', help = 'root directory')

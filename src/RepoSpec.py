@@ -16,8 +16,11 @@ class RepoSpec:
 			return RepoSpec(match.group(2), match.group(3), match.group(1))
 		raise ValueError(f"Invalid repo spec: {spec}")
 
+	def str(self, includeHost = True, includeRevision = True):
+		return (f"{self.host}:" if includeHost and self.host else '') + self.name + (f"@{self.revision}" if includeRevision and self.revision else '')
+
 	def __str__(self):
-		return (f"{self.host}:" if self.host else '') + self.name + (f"@{self.revision}" if self.revision else '')
+		return self.str()
 
 	def __eq__(self, o):
 		return isinstance(o, RepoSpec) and self.name == o.name and self.revision == o.revision and self.host == o.host

@@ -54,9 +54,7 @@ class DB:
 		if not self.dir.is_dir():
 			os.mkdir(self.dir)
 
-		# The database is loaded when the lock is acquired.
-		# Ideally nothing will need the database before then, but it could be loaded here if necessary
-		# self.load()
+		self.load()
 
 	def load(self):
 		self.config = DBFile(self.dir / 'config.json', 'config key', defaultData = DEFAULT_CONFIG)

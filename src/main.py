@@ -110,9 +110,6 @@ def where(repo, format, on_uncloned, ensure_on_disk = True, dest = None):
 		elif format == 'json':
 			return json.dumps({'repospec': str(repo), 'path': path})
 
-	if verbose:
-		print(f"Looking up {repo}")
-
 	# Ambiguous repospecs are a problem. If 'repo' lacks a host, and we can find exactly one matching clone, we use it
 	candidates = [spec for spec in map(RepoSpec.fromStr, db.clones.keys()) if spec.name == repo.name and spec.revision == repo.revision and (repo.host is None or spec.host == repo.host)]
 	if len(candidates) == 1:
@@ -122,11 +119,11 @@ def where(repo, format, on_uncloned, ensure_on_disk = True, dest = None):
 		if not ensure_on_disk or Path(localPath).is_dir():
 			return formatRtn(repo, localPath)
 		elif verbose:
-			print(f"Local clone `{localPath}' no longer exists")
+			print(f"{repo}: local clone `{localPath}' no longer exists")
 	elif len(candidates) > 1:
-		raise RuntimeError(f"Ambiguous repospec {repo} matches multiple clones: {', '.join(map(str, candidates))}")
+		raise RuntimeError(f"{repo}: Ambiguous repospec matches multiple clones: {', '.join(map(str, candidates))}")
 	elif verbose:
-		print("No local clone on record")
+		print(f"{repo}: no local clone on record")
 
 	if on_uncloned == 'skip':
 		return

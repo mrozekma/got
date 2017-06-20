@@ -72,9 +72,9 @@ The argument is one or more :ref:`repospecs <repospec>`. Got will output the loc
    :emphasize-lines: 2-5
 
    $ got project/repo project/repo2
-   No local clone on record
+   project/repo: no local clone on record
    Cloning http://user@localhost:7990/scm/project/repo.git to ~/.got/repos/host/project/repo
-   No local clone on record
+   project/repo2: no local clone on record
    Cloning http://user@localhost:7990/scm/project/repo2.git to ~/.got/repos/host/project/repo2
    ~/.got/repos/host/project/repo
    ~/.got/repos/host/project/repo2

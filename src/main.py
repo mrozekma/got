@@ -204,7 +204,10 @@ def here(repo, dir, force):
 	print(f"{repo} is located at {dir}")
 
 def what(dir):
-	path = (Path(dir) if dir is not None else Path.cwd()).resolve()
+	root = findRoot(dir)
+	if root is None:
+		return
+	path = Path(root).resolve()
 	for k, v in db.clones.items():
 		if Path(v).resolve() == path:
 			return k
@@ -428,7 +431,6 @@ def findRoot(dir):
 	for candidate in [str(path), *map(str, path.parents)]:
 		if candidate in dirs:
 			return candidate
-	raise RuntimeError(f"`{path}' is not within a got repository")
 
 def getCredential(host):
 	if host not in credentials:
@@ -452,7 +454,7 @@ hereParser.add_argument('dir', nargs = '?', default = '.', help = 'local path to
 hereParser.add_argument('-f', '--force', action = 'store_true', help = 'register the path even if a record exists or the specified directory is invalid')
 
 whatParser = makeMode('what', print_return(what), 'find the package name of a local clone')
-whatParser.add_argument('dir', nargs = '?', default = None, help = 'directory to lookup')
+whatParser.add_argument('dir', nargs = '?', default = '.', help = 'directory to lookup')
 
 whenceParser = makeMode('whence', print_return(whence), 'find the remote git path for a package', ['remote'])
 whenceParser.add_argument('repo', type = type_repospec)
@@ -496,7 +498,7 @@ mvParser = makeMode('mv', mv, 'move a cloned repository on disk')
 mvParser.add_argument('repospec', type = type_repospec)
 mvParser.add_argument('dest')
 
-findRootParser = makeMode('find-root', print_return(findRoot), 'find the root of a clone given a path within it')
+findRootParser = makeMode('find-root', print_return(findRoot, '%(dir)s is not within a got repository'), 'find the root of a clone given a path within it')
 findRootParser.add_argument('dir', nargs = '?', default = None, help = 'directory to start from')
 
 # This is used by git-credential, it's not meant for direct user interaction

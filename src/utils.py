@@ -5,7 +5,7 @@ import sys
 import types
 
 # Functions decorated with this will have their stdout redirected to stderr, and their return value printed to outputFile (stdout if none supplied)
-def print_return(f):
+def print_return(f, onNone = None):
 	def wrap(*, outputFile = sys.stdout, **kw):
 		if isinstance(outputFile, str):
 			with open(outputFile, 'w') as fp:
@@ -14,9 +14,13 @@ def print_return(f):
 
 		try:
 			ret = f(**kw)
-			if isinstance(ret, list) or isinstance(ret, types.GeneratorType):
-				ret = '\n'.join(e for e in ret if e)
-			print(ret, file = outputFile)
+			if ret is None:
+				if onNone:
+					raise RuntimeError(onNone % kw)
+			else:
+				if isinstance(ret, list) or isinstance(ret, types.GeneratorType):
+					ret = '\n'.join(e for e in ret if e)
+				print(ret, file = outputFile)
 		finally:
 			sys.stdout = oldStdout
 	return wrap

@@ -20,6 +20,9 @@ class DBFile:
 			self.path.touch(0o600)
 		self.path.write_text(self.getJSON())
 
+	def __len__(self):
+		return len(self.data)
+
 	def __getitem__(self, k):
 		if k not in self.data:
 			raise ValueError(f"Unrecognized {self.contains}: {k}")

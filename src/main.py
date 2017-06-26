@@ -432,6 +432,18 @@ def findRoot(dir):
 		if candidate in dirs:
 			return candidate
 
+def prune(interactive):
+	removed = 0
+	for k, v in list(db.clones.items()):
+		if not Path(v).exists():
+			if interactive and input(f"Remove {k} (missing clone {v})? ").lower() not in ('y', 'yes'):
+				continue
+			del db.clones[k]
+			removed += 1
+			if not interactive:
+				print(f"Removed {k} (missing clone {v})")
+	print(f"Removed {removed}, kept {len(db.clones)}")
+
 def getCredential(host):
 	if host not in credentials:
 		raise ValueError(f"Unrecognized host: {host}")
@@ -500,6 +512,9 @@ mvParser.add_argument('dest')
 
 findRootParser = makeMode('find-root', print_return(findRoot, '%(dir)s is not within a got repository'), 'find the root of a clone given a path within it')
 findRootParser.add_argument('dir', nargs = '?', default = None, help = 'directory to start from')
+
+pruneParser = makeMode('prune', prune, 'unregister clones that no longer exist on disk')
+pruneParser.add_argument('-i', '--interactive', action = 'store_true', help = 'prompt before unregistering missing clones')
 
 # This is used by git-credential, it's not meant for direct user interaction
 getCredentialParser = makeMode('get-credential', getCredential, argparse.SUPPRESS)

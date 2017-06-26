@@ -287,6 +287,13 @@ commit, push  The repository is skipped; no command is run
 fetch, pull   Commits are fetched from the origin and head is hard-reset to the pinned version
 ============  ================================================================================
 
+., _prune:
+
+Cleanup removed repositories
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Scan the filesystem for clones that no longer exist with ``--prune``. Like :ref:`here mode <here>` with a path of `-`, this unregisters clones so that future lookups will make a fresh clone. In the case of ``--prune``, every clone is checked to see if it still exists on disk, and all missing clones are removed. There is one optional argument, ``-i`` (or ``--interactive``), which prompts to unregister each missing clone.
+
 .. _hosts:
 
 List hosts

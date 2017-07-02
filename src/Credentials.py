@@ -1,6 +1,7 @@
 from .DB import db
 
 import keyring
+from typing import *
 
 class DBKeyring(keyring.backend.KeyringBackend):
 	priority = 1
@@ -27,22 +28,22 @@ class Credentials:
 	def __init__(self):
 		pass
 
-	def __getitem__(self, service):
+	def __getitem__(self, service: str) -> Tuple[str, str]:
 		username = db.credentials[service]['username']
 		password = keyring.get_password(service, username)
 		return username, password
 
-	def __setitem__(self, service, cred):
+	def __setitem__(self, service: str, cred: Tuple[str, str]) -> None:
 		username, password = cred
 		db.credentials[service] = {'username': username, 'password': None}
 		keyring.set_password(service, username, password)
 
-	def __delitem__(self, service):
+	def __delitem__(self, service: str) -> None:
 		username, _ = self[service]
 		keyring.delete_password(service, username)
 		del db.credentials[service]
 
-	def __contains__(self, service):
+	def __contains__(self, service: str) -> bool:
 		return service in db.credentials
 
 	def __iter__(self):

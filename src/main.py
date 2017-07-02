@@ -1,5 +1,4 @@
 import argparse
-from collections import OrderedDict
 from getpass import getpass
 import git
 import json
@@ -9,8 +8,8 @@ from pathlib import Path
 import re
 import shutil
 import string
-import subprocess
 import sys
+from typing import *
 
 from .Credentials import credentials
 from .DB import db, gotRoot
@@ -41,7 +40,7 @@ class Template(string.Template):
 	delimiter = '%'
 
 modeGroup = parser.add_mutually_exclusive_group()
-def makeMode(name, handler, desc, aliases = []):
+def makeMode(name: str, handler: Callable, desc: Optional[str], aliases: List[str] = []) -> argparse.ArgumentParser:
 	rtn = argparse.ArgumentParser(prog = f"{parser.prog} --{name}")
 	rtn.set_defaults(handler = handler)
 	modeGroup.add_argument(f"--{name}", action = 'store_const', dest = 'modeParser', const = rtn, help = desc or f"{name.title()} mode")
@@ -49,18 +48,18 @@ def makeMode(name, handler, desc, aliases = []):
 		modeGroup.add_argument(f"--{alias}", action = 'store_const', dest = 'modeParser', const = rtn, help = argparse.SUPPRESS)
 	return rtn
 
-def type_host_name(name):
+def type_host_name(name: str) -> str:
 	if re.match(HOST_PATTERN, name) is None:
 		raise argparse.ArgumentTypeError(f"Invalid remote name: {name}")
 	return name
 
-def type_repospec(spec):
+def type_repospec(spec: str) -> RepoSpec:
 	try:
 		return RepoSpec.fromStr(spec)
 	except ValueError as e:
 		raise argparse.ArgumentTypeError(str(e))
 
-def type_multipart_repospec(spec):
+def type_multipart_repospec(spec: str) -> Iterable[RepoSpec]:
 	# '@file' means read the specs from 'file'
 	if spec.startswith('@'):
 		path = Path(spec[1:])
@@ -86,7 +85,8 @@ def type_multipart_repospec(spec):
 		specs = [spec]
 	return map(type_repospec, specs)
 
-def findRepo(repospec):
+def findRepo(repospec: RepoSpec) -> Tuple[Optional[Host], Optional[str]]:
+	# return: (Host, URL)
 	if not db.hosts.keys():
 		if verbose:
 			print("No hosts registered -- add one with --add-host")
@@ -105,8 +105,10 @@ def findRepo(repospec):
 		print("No valid host has a record of the requested repository")
 	return None, None
 
-def where(repo, format, on_uncloned, ensure_on_disk = True, dest = None):
-	def formatRtn(repo, path):
+def where(repo: RepoSpec, format: str, on_uncloned: str, ensure_on_disk: bool = True, dest: str = None):
+	# format: plain, py, json
+	# on_uncloned: clone, skip, fail, fake
+	def formatRtn(repo: RepoSpec, path: str):
 		if format == 'plain':
 			return path
 		elif format == 'py':
@@ -161,13 +163,13 @@ def where(repo, format, on_uncloned, ensure_on_disk = True, dest = None):
 	return formatRtn(repo, str(localPath))
 
 # This is an adapter for command-line where mode. 'repos' comes from an argument of type 'multipart_repospec' with '+' nargs, so it's a list of lists of repospecs that needs to be flattened and passed to where() individually
-def whereCLI(repos, format, on_uncloned, ensure_on_disk = True, dest = None):
+def whereCLI(repos: List[List[RepoSpec]], format: str, on_uncloned: str, ensure_on_disk: bool = True, dest: bool = None):
 	repos = [spec for l in repos for spec in l]
 	if dest is not None and len(repos) > 1:
 		raise ValueError("Can't specify a clone destination with multiple repospecs")
 	return [where(repo, format, on_uncloned, ensure_on_disk, dest) for repo in repos]
 
-def here(repo, dir, force):
+def here(repo: RepoSpec, dir: str, force: bool) -> None:
 	if dir == '-':
 		existing = where(repo, 'py', 'skip', False)
 		if existing:
@@ -203,7 +205,7 @@ def here(repo, dir, force):
 	db.clones[str(repo)] = str(dir)
 	print(f"{repo} is located at {dir}")
 
-def what(dir):
+def what(dir: Optional[str]) -> Optional[str]:
 	root = findRoot(dir)
 	if root is None:
 		return
@@ -212,7 +214,7 @@ def what(dir):
 		if Path(v).resolve() == path:
 			return k
 
-def whence(repo, format):
+def whence(repo: RepoSpec, format: str) -> str:
 	host, url = findRepo(repo)
 	if format == 'plain':
 		if url is not None:
@@ -220,7 +222,7 @@ def whence(repo, format):
 	elif format == 'json':
 		return json.dumps({'repospec': str(repo), 'host': host.name, 'url': url})
 
-def showHosts(format):
+def showHosts(format: str) -> None:
 	if format == 'plain':
 		print(f"    {'Name':30} {'Type':20} URL")
 		for name, host in sorted(db.hosts.items()):
@@ -233,7 +235,7 @@ def showHosts(format):
 	elif format == 'json':
 		print(db.hosts.getJSON())
 
-def addHost(name, url, type, username, password, force):
+def addHost(name: str, url: str, type: str, username: str, password: str, force: bool) -> None:
 	if name in db.hosts:
 		raise RuntimeError(f"Unable to add host: name `{name}' already mapped to {db.hosts[name]['url']}")
 	if password == '-':
@@ -253,7 +255,7 @@ def addHost(name, url, type, username, password, force):
 	credentials[name] = username, password
 	print(f"Added {type} host {name} at {url}")
 
-def editHost(name, new_url, new_username, new_password, force):
+def editHost(name: str, new_url: Optional[str], new_username: Optional[str], new_password: Optional[str], force: bool) -> None:
 	if not name in db.hosts:
 		raise ValueError(f"No host named {name}")
 	print(f"Editing host: {name}")
@@ -293,7 +295,7 @@ def editHost(name, new_url, new_username, new_password, force):
 	db.hosts[kw['name']] = {'type': kw['type'], 'url': kw['url']}
 	credentials[kw['name']] = kw['username'], kw['password']
 
-def rmHost(name):
+def rmHost(name: str) -> None:
 	if name not in db.hosts:
 		raise RuntimeError(f"Unknown host `{name}'")
 	del db.hosts[name]
@@ -305,7 +307,7 @@ def rmHost(name):
 			del db.clones[spec]
 		print(f"Unregistered {len(clones)} {'clone' if len(clones) == 1 else 'clones'}")
 
-def iterDeps(spec):
+def iterDeps(spec: Optional[str]) -> Iterable[Tuple[RepoSpec, str]]:
 	if spec is None:
 		spec = what(None)
 		if spec is None:
@@ -329,7 +331,7 @@ def iterDeps(spec):
 		elif len(seen) == 1: # This is the first repo, the one the user specified
 			print(f"{repo} has no dependencies file ({depsPath})")
 
-def deps(repo, format):
+def deps(repo: Optional[RepoSpec], format: str) -> Iterable[str]:
 	t = Template(format)
 	for repospec, path in iterDeps(None if repo is None else str(repo)):
 		try:
@@ -347,7 +349,7 @@ def deps(repo, format):
 		except KeyError as e:
 			raise ValueError("Invalid format string specifier: %s" % e)
 
-def gitPassthrough(directory, ignore_errors, args):
+def gitPassthrough(directory: Optional[str], ignore_errors: bool, args: List[str]) -> None:
 	if not args:
 		raise ValueError("No git command specified")
 	command, args = args[0], args[1:]
@@ -395,7 +397,7 @@ def gitPassthrough(directory, ignore_errors, args):
 	if failed:
 		print(f"Command failed on {failed} {'repository' if failed == 1 else 'repositories'}")
 
-def config(key, value):
+def config(key: Optional[str], value: Optional[str]) -> None:
 	if key is None:
 		for key, value in db.config.items():
 			print(f"{key} = {value}")
@@ -409,7 +411,7 @@ def config(key, value):
 			db.config[key] = value
 			print(f"New value: {db.config[key]}")
 
-def mv(repospec, dest):
+def mv(repospec: RepoSpec, dest: str) -> None:
 	clone = where(repospec, 'py', 'skip')
 	if clone is None:
 		raise ValueError(f"No clone found for {repospec}") from None
@@ -425,14 +427,14 @@ def mv(repospec, dest):
 	db.clones[str(repospec)] = str(dest)
 	print(f"{repospec} moved to {dest}")
 
-def findRoot(dir):
+def findRoot(dir: Optional[str]) -> Optional[str]:
 	dirs = db.clones.values()
 	path = (Path(dir) if dir is not None else Path.cwd()).resolve()
 	for candidate in [str(path), *map(str, path.parents)]:
 		if candidate in dirs:
 			return candidate
 
-def prune(interactive):
+def prune(interactive: bool) -> None:
 	removed = 0
 	for k, v in list(db.clones.items()):
 		if not Path(v).exists():
@@ -444,7 +446,7 @@ def prune(interactive):
 				print(f"Removed {k} (missing clone {v})")
 	print(f"Removed {removed}, kept {len(db.clones)}")
 
-def getCredential(host):
+def getCredential(host: str) -> None:
 	if host not in credentials:
 		raise ValueError(f"Unrecognized host: {host}")
 	username, password = credentials[host]

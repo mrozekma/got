@@ -6,17 +6,37 @@ if sys.version_info < (3, 6):
 import argparse
 import os
 parser = argparse.ArgumentParser(add_help = False)
-parser.add_argument('-q', '--quiet', action = 'store_true')
+parser.add_argument('-v', '--verbose', action = 'count', default = None, help = 'increase the verbosity level')
+parser.add_argument('-q', '--quiet', action = 'store_const', dest = 'verbose', const = 0, help = "don't output verbose information to stderr (clear the verbosity level)")
+verbose = 1
+
 args, _ = parser.parse_known_args()
-verbose = not (args.quiet or ('GOT_QUIET' in os.environ))
+verbosity = args.verbose
+if verbosity is None: # Not specified on command-line -- default to 1 unless overridden in environment
+	if 'GOT_QUIET' in os.environ:
+		verbosity = 0
+	elif 'GOT_VERBOSE' in os.environ:
+		try:
+			verbosity = int(os.environ['GOT_VERBOSE'])
+		except ValueError:
+			verbosity = 1
+	else:
+		verbosity = 1
+
+from src.utils import verbose
+verbose(set = verbosity)
+del verbosity
 
 if __name__ == '__main__':
 	try:
 		from src import dependencies
+		from src import DB
+		if verbose(1) and DB.db.isNew:
+			print("New database created at %s" % DB.db.path, file = sys.stderr)
 		from src import main
 	except Exception as e:
 		print("Fatal error: %s" % e, file = sys.stderr)
-		if verbose:
+		if verbose(2):
 			print(file = sys.stderr)
 			import traceback
 			traceback.print_exc(file = sys.stderr)

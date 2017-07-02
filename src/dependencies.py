@@ -17,3 +17,8 @@ for line in requirementsPath.read_text().split('\n'):
 			import_module(package or project)
 		except ImportError:
 			raise RuntimeError(f"Missing Python dependencies. Run the following to install: {sys.executable} -m pip install -r {requirementsPath}")
+
+try:
+	import _sqlite3
+except ModuleNotFoundError:
+	raise RuntimeError("Python was built without the sqlite3 library")

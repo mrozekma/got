@@ -1,8 +1,12 @@
+import os
 from pathlib import Path
 import platform
-import re
 import sys
 import types
+from typing import *
+
+gotRoot = os.environ.get('GOT_ROOT')
+gotRoot = Path(gotRoot).resolve() if gotRoot is not None else (Path.home() / '.got')
 
 # Functions decorated with this will have their stdout redirected to stderr, and their return value printed to outputFile (stdout if none supplied)
 def print_return(f, onNone = None):
@@ -36,3 +40,17 @@ def makeGitEnvironment(hostname):
 		'GOT_HOSTNAME': hostname,
 		'GOT_ROOT': str(gotRoot),
 	}
+
+verbosity = 1
+def verbose(lvl: int = None, *, set: int = None) -> Union[int, bool]:
+	'''
+	verbose() returns the current level
+	verbose(lvl) returns True if the current level is at least 'lvl'
+	verbose(set = lvl) sets the current level to 'lvl'
+	'''
+	if set is not None:
+		global verbosity
+		verbosity = set
+	if lvl is not None:
+		return verbosity >= lvl
+	return verbosity

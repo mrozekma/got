@@ -1,3 +1,5 @@
+from .DB import registerType
+
 import re
 
 HOST_PATTERN = '[a-zA-Z0-9_-]+'
@@ -27,3 +29,5 @@ class RepoSpec:
 
 	def __hash__(self):
 		return hash(str(self))
+
+registerType(RepoSpec, str, RepoSpec.fromStr)

@@ -287,7 +287,7 @@ commit, push  The repository is skipped; no command is run
 fetch, pull   Commits are fetched from the origin and head is hard-reset to the pinned version
 ============  ================================================================================
 
-., _prune:
+.. _prune:
 
 Cleanup removed repositories
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~

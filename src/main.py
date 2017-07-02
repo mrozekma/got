@@ -9,13 +9,20 @@ import re
 import shutil
 import string
 import sys
-from typing import *
 
-from .Credentials import credentials
 from .DB import db, gotRoot
+from .Credentials import Credential
+from .Config import config
+from .Clone import Clone
 from .Host import Host, BitbucketHost
+
 from .RepoSpec import RepoSpec, HOST_PATTERN
-from .utils import print_return, makeGitEnvironment
+from .utils import print_return, makeGitEnvironment, verbose
+
+# Type hints
+from typing import *
+URL = NewType('URL', str)
+JSON = NewType('JSON', str)
 
 class DeprecatedAction(argparse.Action):
 	def __init__(self, option_strings, dest, why = None, **kw):
@@ -31,10 +38,10 @@ class DeprecatedAction(argparse.Action):
 			print(f"Warning: {option_string} is deprecated" + (f": {self.why}" if self.why else ''), file = sys.stderr)
 
 parser = argparse.ArgumentParser(add_help = False)
-parser.add_argument('-v', '--verbose', action = DeprecatedAction, why = 'verbose output is enabled by default')
-parser.add_argument('-q', '--quiet', action = 'store_true', help = "don't output verbose information to stderr")
-parser.add_argument('--unlock', action = 'store_true', help = 'remove the lockfile if it exists')
-verbose = True
+parser.add_argument('--unlock', action = DeprecatedAction, help = 'stale locks are now detected automatically')
+# --verbose and --quiet are handled by the root script; they're included here so they show up in help output and don't cause argparse errors when present
+parser.add_argument('-v', '--verbose', action = 'count', default = None, help = 'increase the verbosity level')
+parser.add_argument('-q', '--quiet', action = 'store_const', dest = 'verbose', const = 0, help = "don't output verbose information to stderr (clear the verbosity level)")
 
 class Template(string.Template):
 	delimiter = '%'
@@ -73,62 +80,60 @@ def type_multipart_repospec(spec: str) -> Iterable[RepoSpec]:
 		repo = RepoSpec.fromStr(project)
 		if repo.host:
 			try:
-				hosts = [Host.fromDB(repo.host)]
+				hosts = [Host.load(name = repo.host, type = 'bitbucket')]
 			except ValueError:
-				raise argparse.ArgumentTypeError(f"Invalid multipart repospec: no host named `{repo.host}'")
-			if not isinstance(hosts[0], BitbucketHost):
-				raise argparse.ArgumentTypeError(f"Unable to resolve multipart repospec: host `{repo.host}' is not a Bitbucket host")
+				raise argparse.ArgumentTypeError(f"Invalid multipart repospec: no Bitbucket host named `{repo.host}'")
 		else:
-			hosts = [host for host in map(Host.fromDB, db.hosts.keys()) if isinstance(host, BitbucketHost)]
+			hosts = Host.loadAll(type = 'bitbucket')
 		specs = [f"{host.name}:{project}/{reponame}" for host in hosts for reponame in host.getReposInProject(project)]
 	else:
 		specs = [spec]
 	return map(type_repospec, specs)
 
-def findRepo(repospec: RepoSpec) -> Tuple[Optional[Host], Optional[str]]:
-	# return: (Host, URL)
-	if not db.hosts.keys():
-		if verbose:
+def findRepo(repospec: RepoSpec) -> Tuple[Optional[Host], Optional[URL]]:
+	if not Host.count():
+		if verbose(1):
 			print("No hosts registered -- add one with --add-host")
 		return None, None
 
 	# If the repospec specifies a host, check that one; otherwise check them all
-	hosts = [repospec.host] if repospec.host else db.hosts.keys()
-	for hostname in hosts:
+	hosts = [Host.load(name = repospec.host)] if repospec.host else Host.loadAll()
+	errors = []
+	for host in hosts:
 		try:
-			host = Host.fromDB(hostname)
 			return host, host.getCloneURL(repospec.name)
 		except Exception as e:
-			if verbose:
-				print(f"{hostname}: {e}")
-	if verbose:
-		print("No valid host has a record of the requested repository")
+			errors.append(f"{host.name}: {e}")
+	if verbose(1):
+		print()
+		print("No valid host has a record of the requested repository:")
+		for error in errors:
+			print(f"  {error}")
 	return None, None
 
-def where(repo: RepoSpec, format: str, on_uncloned: str, ensure_on_disk: bool = True, dest: str = None):
+def where(repo: RepoSpec, format: str, on_uncloned: str, ensure_on_disk: bool = True, dest: str = None) -> Optional[Union[str, Clone, JSON]]:
 	# format: plain, py, json
 	# on_uncloned: clone, skip, fail, fake
-	def formatRtn(repo: RepoSpec, path: str):
+	def formatRtn(clone: Clone) -> Union[str, Clone, JSON]:
 		if format == 'plain':
-			return path
+			return str(clone.path)
 		elif format == 'py':
-			return {'repospec': repo, 'path': path}
+			return clone
 		elif format == 'json':
-			return json.dumps({'repospec': str(repo), 'path': path})
+			return json.dumps({'repospec': str(clone.repospec), 'path': str(clone.path)})
 
 	# Ambiguous repospecs are a problem. If 'repo' lacks a host, and we can find exactly one matching clone, we use it
-	candidates = [spec for spec in map(RepoSpec.fromStr, db.clones.keys()) if spec.name == repo.name and spec.revision == repo.revision and (repo.host is None or spec.host == repo.host)]
+	candidates = list(Clone.loadSpec(repo))
 	if len(candidates) == 1:
-		repo = candidates[0]
-		localPath = db.clones[str(repo)]
+		clone = candidates[0]
 		# Make sure the local path actually exists
-		if not ensure_on_disk or Path(localPath).is_dir():
-			return formatRtn(repo, localPath)
-		elif verbose:
-			print(f"{repo}: local clone `{localPath}' no longer exists")
+		if not ensure_on_disk or clone.path.is_dir():
+			return formatRtn(clone)
+		elif verbose(1):
+			print(f"{repo}: local clone `{clone.path}' no longer exists")
 	elif len(candidates) > 1:
-		raise RuntimeError(f"{repo}: Ambiguous repospec matches multiple clones: {', '.join(map(str, candidates))}")
-	elif verbose:
+		raise RuntimeError(f"{repo}: Ambiguous repospec matches multiple clones: {', '.join(clone.repospec for clone in candidates)}")
+	elif verbose(1):
 		print(f"{repo}: no local clone on record")
 
 	if on_uncloned == 'skip':
@@ -136,7 +141,7 @@ def where(repo: RepoSpec, format: str, on_uncloned: str, ensure_on_disk: bool = 
 	elif on_uncloned == 'fail':
 		raise RuntimeError(f"No local clone of {repo}")
 	elif on_uncloned == 'fake':
-		return formatRtn(repo, str(Path(db.config['clone_root']) / '__REPO_NOT_FOUND__'))
+		return formatRtn(Clone(repo, Path(config.clone_root) / '__REPO_NOT_FOUND__'))
 
 	# If we don't have a matching clone, we need to find its host and clone it
 	host, url = findRepo(repo)
@@ -145,23 +150,25 @@ def where(repo: RepoSpec, format: str, on_uncloned: str, ensure_on_disk: bool = 
 	if repo.host is None:
 		repo.host = host.name
 
-	localPath = Path(dest) if dest else Path(db.config['clone_root']) / host.name / (f"{repo.name}@{repo.revision}" if repo.revision is not None else repo.name)
+	localPath = Path(dest) if dest else Path(config.clone_root) / host.name / (f"{repo.name}@{repo.revision}" if repo.revision is not None else repo.name)
 	if localPath.is_dir():
-		if verbose:
+		if verbose(1):
 			print(f"{localPath} already exists; switching to here mode")
-		here(repo, str(localPath), False)
-		return formatRtn(repo, str(localPath))
+		clone = here(repo, str(localPath), False)
+		return formatRtn(clone)
 
 	os.makedirs(localPath.parent, exist_ok = True)
-	if verbose:
+	if verbose(1):
 		print(f"Cloning {url} to {localPath}")
 	git.Repo.clone_from(url, str(localPath), env = makeGitEnvironment(host.name))
 	if repo.revision is not None:
 		r = git.Repo(str(localPath))
 		r.head.reference = r.commit(repo.revision)
 		r.head.reset(index = True, working_tree = True)
-	db.clones[str(repo)] = str(localPath)
-	return formatRtn(repo, str(localPath))
+
+	clone = Clone(repo, localPath)
+	clone.save()
+	return formatRtn(clone)
 
 # This is an adapter for command-line where mode. 'repos' comes from an argument of type 'multipart_repospec' with '+' nargs, so it's a list of lists of repospecs that needs to be flattened and passed to where() individually
 def whereCLI(repos: List[List[RepoSpec]], format: str, on_uncloned: str, ensure_on_disk: bool = True, dest: bool = None):
@@ -173,15 +180,14 @@ def whereCLI(repos: List[List[RepoSpec]], format: str, on_uncloned: str, ensure_
 		rtn = json.dumps([json.loads(e) for e in rtn])
 	return rtn
 
-def here(repo: RepoSpec, dir: str, force: bool) -> None:
+def here(repo: RepoSpec, dir: str, force: bool) -> Optional[Clone]:
 	if dir == '-':
-		existing = where(repo, 'py', 'skip', False)
+		existing: Clone = where(repo, 'py', 'skip', False)
 		if existing:
-			repo = existing['repospec']
-			del db.clones[str(repo)]
-			print(f"{repo} no longer has a registered local clone")
-			if Path(existing['path']).exists():
-				print(f"(old path still exists on disk: {existing['path']})")
+			existing.delete()
+			print(f"{existing.repospec} no longer has a registered local clone")
+			if existing.path.exists():
+				print(f"(old path still exists on disk: {existing.path})")
 		return
 
 	if repo.host is None:
@@ -189,10 +195,10 @@ def here(repo: RepoSpec, dir: str, force: bool) -> None:
 
 	dir = Path(dir).resolve()
 	if not force:
-		existing = where(repo, 'py', 'skip')
+		existing: Clone = where(repo, 'py', 'skip')
 		if existing:
-			raise ValueError(f"{repo} is already mapped to {existing['path']}")
-		cloneUrl = Host.fromDB(repo.host).getCloneURL(repo.name)
+			raise ValueError(f"{repo} is already mapped to {existing.path}")
+		cloneUrl = Host.load(name = repo.host).getCloneURL(repo.name)
 
 		if not dir.exists():
 			raise ValueError(f"Path not found: {dir}")
@@ -206,23 +212,32 @@ def here(repo: RepoSpec, dir: str, force: bool) -> None:
 		except IndexError:
 			raise ValueError(f"Repository has no origin: {dir}")
 
-	db.clones[str(repo)] = str(dir)
+	rtn = Clone(repo, dir)
+	rtn.save()
 	print(f"{repo} is located at {dir}")
+	return rtn
 
-def what(dir: Optional[str]) -> Optional[str]:
-	root = findRoot(dir)
-	if root is None:
+def what(dir: Optional[str]) -> Optional[RepoSpec]:
+	path = findRoot(dir)
+	if path is None:
 		d = Path(dir) if dir is not None else Path.cwd()
 		raise RuntimeError(f"Not a got repository: {d.resolve()}")
-	path = Path(root).resolve()
-	for k, v in db.clones.items():
-		if Path(v).resolve() == path:
-			return k
+
+	# If any clone has this exact path already, return it
+	clone = Clone.load(path = str(path))
+	if clone is not None:
+		return clone.repospec
+
+	# If not, try resolving each path to find a match
+	for clone in Clone.loadAll():
+		if clone.path.resolve() == path:
+			return clone.repospec
+
 	# Shouldn't be able to get here
-	d  = Path(dir) if dir is not None else Path.cwd()
+	d = Path(dir) if dir is not None else Path.cwd()
 	raise RuntimeError(f"Not a got repository: {d.resolve()}")
 
-def whence(repo: RepoSpec, format: str) -> str:
+def whence(repo: RepoSpec, format: str) -> Union[URL, JSON]:
 	host, url = findRepo(repo)
 	if host is None:
 		raise RuntimeError(f"Unable to resolve repospec {repo}")
@@ -235,25 +250,27 @@ def whence(repo: RepoSpec, format: str) -> str:
 def showHosts(format: str) -> None:
 	if format == 'plain':
 		print(f"    {'Name':30} {'Type':20} URL")
-		for name, host in sorted(db.hosts.items()):
+		for host in Host.loadAll(sort = 'name ASC'):
 			try:
-				Host.fromDB(name)
+				host.check()
 				valid = True
 			except Exception:
 				valid = False
-			print(f"{'   ' if valid else '(!)'} {name:30} {host['type']:20} {host['url']}")
+			print(f"{'   ' if valid else '(!)'} {host.name:30} {host.type:20} {host.url}")
 	elif format == 'json':
-		print(db.hosts.getJSON())
+		print(json.dumps({host.name: {'type': host.type, 'url': host.url} for host in Host.loadAll()}))
 
 def addHost(name: str, url: str, type: str, username: str, password: str, force: bool) -> None:
-	if name in db.hosts:
-		raise RuntimeError(f"Unable to add host: name `{name}' already mapped to {db.hosts[name]['url']}")
+	host = Host.tryLoad(name = name)
+	if host is not None:
+		raise RuntimeError(f"Unable to add host: name `{name}' already mapped to {host.url}")
 	if password == '-':
 		password = getpass()
 
+	host = Host(name, type, url, username, password)
 	# Make sure the host is valid
 	try:
-		Host(name, type, url, username, password)
+		host.check()
 	except ConnectionError as e:
 		if force:
 			print(f"Host error (continuing anyway): {e}")
@@ -261,13 +278,11 @@ def addHost(name: str, url: str, type: str, username: str, password: str, force:
 			raise ConnectionError(f"Unable to add host: {e}")
 
 	# Save
-	db.hosts[name] = {'type': type, 'url': url}
-	credentials[name] = username, password
+	host.save()
 	print(f"Added {type} host {name} at {url}")
 
 def editHost(name: str, new_url: Optional[str], new_username: Optional[str], new_password: Optional[str], force: bool) -> None:
-	if not name in db.hosts:
-		raise ValueError(f"No host named {name}")
+	host = Host.load(name = name, err = f"No host named {name}")
 	print(f"Editing host: {name}")
 
 	if new_password == '-':
@@ -275,52 +290,42 @@ def editHost(name: str, new_url: Optional[str], new_username: Optional[str], new
 
 	# Mutable fields
 	fields = [
-		('url', db.hosts[name]['url'], new_url),
-		('username', credentials[name][0], new_username),
-		('password', credentials[name][1], new_password),
+		('url', new_url),
+		('username', new_username),
+		('password', new_password),
 	]
-	# Immutable fields
-	kw = {
-		'name': name,
-		'type': db.hosts[name]['type'],
-	}
 
-	for (field, oldVal, newVal) in fields:
-		if newVal:
-			kw[field] = newVal
+	for field, newVal in fields:
+		if newVal is not None:
+			setattr(host, field, newVal)
 			print(f"  New {field}: {'***' if field == 'password' else newVal}")
 			if field == 'url':
 				print("    Warning: Existing clones will still point to the old remote URL")
-		else:
-			kw[field] = oldVal
 
 	try:
-		Host(**kw)
+		host.check()
 	except ConnectionError as e:
 		if force:
 			print(f"Host error (editing anyway): {e}")
 		else:
 			raise ConnectionError(f"Unable to edit host: {e}")
 
-	db.hosts[kw['name']] = {'type': kw['type'], 'url': kw['url']}
-	credentials[kw['name']] = kw['username'], kw['password']
+	host.save()
 
 def rmHost(name: str) -> None:
-	if name not in db.hosts:
-		raise RuntimeError(f"Unknown host `{name}'")
-	del db.hosts[name]
-	del credentials[name]
+	host = Host.load(name = name, err = f"No host named {name}")
+	host.delete()
 	print(f"Removed host {name}")
-	clones = [spec for spec in db.clones.keys() if RepoSpec.fromStr(spec).host == name]
-	if clones:
-		for spec in clones:
-			del db.clones[spec]
-		print(f"Unregistered {len(clones)} {'clone' if len(clones) == 1 else 'clones'}")
+	ptn = name.replace('\\', '\\\\').replace('%', '\\%') + ':%'
+	with db.cursor("DELETE FROM clones WHERE repospec LIKE ? ESCAPE '\\'", ptn) as cur:
+		num = cur.rowcount
+		print(f"Unregistered {num} {'clone' if num == 1 else 'clones'}")
 
-def iterDeps(spec: Optional[str]) -> Iterable[Tuple[RepoSpec, str]]:
+#TODO Change 'spec' to an Optional[RepoSpec]
+def iterDeps(spec: Optional[str]) -> Iterable[Clone]:
 	if spec is None:
 		try:
-			spec = what(None)
+			spec = str(what(None))
 		except RuntimeError:
 			print("Current directory is not a tracked repository")
 			return
@@ -332,11 +337,11 @@ def iterDeps(spec: Optional[str]) -> Iterable[Tuple[RepoSpec, str]]:
 		if spec in seen:
 			continue
 		repo = RepoSpec.fromStr(spec)
-		w = where(repo, 'py', 'clone')
+		clone: Clone = where(repo, 'py', 'clone')
 		seen.add(spec)
-		yield w['repospec'], w['path']
+		yield clone
 
-		depsPath = Path(w['path']) / 'deps.got'
+		depsPath = Path(clone.path) / 'deps.got'
 		if depsPath.exists():
 			worklist += [depSpec for depSpec in depsPath.read_text().split() if depSpec not in seen]
 		elif len(seen) == 1: # This is the first repo, the one the user specified
@@ -344,18 +349,18 @@ def iterDeps(spec: Optional[str]) -> Iterable[Tuple[RepoSpec, str]]:
 
 def deps(repo: Optional[RepoSpec], format: str) -> Iterable[str]:
 	t = Template(format)
-	for repospec, path in iterDeps(None if repo is None else str(repo)):
+	for clone in iterDeps(None if repo is None else str(repo)):
 		try:
-			hexsha = git.Repo(path).head.commit.hexsha
+			hexsha = git.Repo(str(clone.path)).head.commit.hexsha
 		except:
 			hexsha = '0' * 40
 		try:
 			yield t.substitute(
 				H = hexsha,
 				h = hexsha[:7],
-				RS = repospec.str(),
-				rs = repospec.str(False, False),
-				p = path,
+				RS = clone.repospec.str(),
+				rs = clone.repospec.str(False, False),
+				p = str(clone.path),
 			)
 		except KeyError as e:
 			raise ValueError("Invalid format string specifier: %s" % e)
@@ -377,22 +382,22 @@ def gitPassthrough(directory: Optional[str], ignore_errors: bool, args: List[str
 
 	# Iterate over the root repo and its dependencies
 	failed = 0
-	for spec, w in iterDeps(rootRepo):
-		repo = git.Repo(w)
-		if spec.revision and repo.index.diff(None):
-			print(f"{spec}: Unexpected changes in version-pinned repository")
-		elif spec.revision and repo.commit(spec.revision) != repo.head.commit:
-			print(f"{spec}: Wrong HEAD in version-pinned repository")
+	for clone in iterDeps(str(rootRepo)):
+		repo = git.Repo(str(clone.path))
+		if clone.repospec.revision and repo.index.diff(None):
+			print(f"{clone.repospec}: Unexpected changes in version-pinned repository")
+		elif clone.repospec.revision and repo.commit(clone.repospec.revision) != repo.head.commit:
+			print(f"{clone.repospec}: Wrong HEAD in version-pinned repository")
 		else:
-			print(spec)
-		with repo.git.custom_environment(**makeGitEnvironment(spec.host)):
+			print(clone.repospec)
+		with repo.git.custom_environment(**makeGitEnvironment(clone.repospec.host)):
 			try:
-				if spec.revision:
+				if clone.repospec.revision:
 					if pinnedBehavior == 'skip':
 						continue
 					elif pinnedBehavior == 'reset':
 						repo.remotes['origin'].fetch()
-						repo.head.reset(spec.revision, hard = True)
+						repo.head.reset(clone.repospec.revision, hard = True)
 						continue
 				print(getattr(repo.git, command)(*args))
 			except git.exc.GitCommandError as e:
@@ -406,25 +411,25 @@ def gitPassthrough(directory: Optional[str], ignore_errors: bool, args: List[str
 	if failed:
 		print(f"Command failed on {failed} {'repository' if failed == 1 else 'repositories'}")
 
-def config(key: Optional[str], value: Optional[str]) -> None:
+def configCLI(key: Optional[str], value: Optional[str]) -> None:
 	if key is None:
-		for key, value in db.config.items():
-			print(f"{key} = {value}")
+		for c in config.all():
+			print(f"{c.key} = {c.value}")
 	else:
-		if key not in db.config:
-			raise ValueError(f"Configuration key not found: {key}")
+		curValue = getattr(config, key)
 		if value is None:
-			print(db.config[key])
+			print(curValue)
 		else:
-			print(f"Old value: {db.config[key]}")
-			db.config[key] = str(Path(value).resolve())
-			print(f"New value: {db.config[key]}")
+			print(f"Old value: {curValue}")
+			newValue = str(Path(value).resolve())
+			setattr(config, key, newValue)
+			print(f"New value: {newValue}")
 
 def mv(repospec: RepoSpec, dest: str) -> None:
-	clone = where(repospec, 'py', 'skip')
+	clone: Clone = where(repospec, 'py', 'skip')
 	if clone is None:
 		raise ValueError(f"No clone found for {repospec}") from None
-	repospec, src = clone['repospec'], clone['path']
+	repospec, src = clone.repospec, clone.path
 	dest = Path(dest).resolve()
 	if dest.exists():
 		if not dest.is_dir():
@@ -433,33 +438,36 @@ def mv(repospec: RepoSpec, dest: str) -> None:
 		if dest.exists():
 			raise ValueError(f"Destination already exists: {dest}")
 	shutil.move(src, dest)
-	db.clones[str(repospec)] = str(dest)
+	clone.path = dest
+	clone.save()
 	print(f"{repospec} moved to {dest}")
 
-def findRoot(dir: Optional[str]) -> Optional[str]:
-	dirs = db.clones.values()
+def findRoot(dir: Optional[str]) -> Optional[Path]:
+	# This could theoretically be one query that ORs together a bunch of paths
 	path = (Path(dir) if dir is not None else Path.cwd()).resolve()
-	for candidate in [str(path), *map(str, path.parents)]:
-		if candidate in dirs:
-			return candidate
+	clone = Clone.tryLoad(path = str(path))
+	if clone:
+		return clone.path
+	for path in path.parents:
+		clone = Clone.tryLoad(path = str(path))
+		if clone:
+			return clone.path
 
 def prune(interactive: bool) -> None:
-	removed = 0
-	for k, v in list(db.clones.items()):
-		if not Path(v).exists():
-			if interactive and input(f"Remove {k} (missing clone {v})? ").lower() not in ('y', 'yes'):
+	removed, total = 0, 0
+	for clone in Clone.loadAll():
+		total += 1
+		if not clone.path.exists():
+			if interactive and input(f"Remove {clone.repospec} (missing clone {clone.path})? ").lower() not in ('y', 'yes'):
 				continue
-			del db.clones[k]
+			clone.delete()
 			removed += 1
 			if not interactive:
-				print(f"Removed {k} (missing clone {v})")
-	print(f"Removed {removed}, kept {len(db.clones)}")
+				print(f"Removed {clone.repospec} (missing clone {clone.path})")
+	print(f"Removed {removed}, kept {total - removed}")
 
 def getCredential(host: str) -> None:
-	if host not in credentials:
-		raise ValueError(f"Unrecognized host: {host}")
-	username, password = credentials[host]
-	print(password)
+	print(Host.load(name = host).password)
 
 whereParser = makeMode('where', print_return(whereCLI), 'find the local path to a package, cloning it from a git host if necessary', ['local'])
 whereParser.add_argument('repos', nargs = '+', type = type_multipart_repospec)
@@ -513,7 +521,7 @@ gitParser.add_argument('-C', '--directory', metavar = 'DIR', default = '.', help
 gitParser.add_argument('-i', '--ignore-errors', action = 'store_true', help = "don't stop if the git command fails")
 gitParser.add_argument('args', nargs = argparse.REMAINDER, help = 'arguments to pass to git')
 
-configParser = makeMode('config', config, 'get/set configuration key(s)')
+configParser = makeMode('config', configCLI, 'get/set configuration key(s)')
 configParser.add_argument('key', nargs = '?', help = 'configuration key to get/set; if omitted, all keys are shown')
 configParser.add_argument('value', nargs = '?', help = 'value to set')
 
@@ -540,30 +548,9 @@ parser.set_defaults(modeParser = whereParser)
 
 # First parse to isolate the mode; we get back a namespace containing 'modeParser' for the mode-specific parser, and a list of all the unprocessed arguments to pass on
 args, extraArgs = parser.parse_known_args()
-verbose = not (args.quiet or ('GOT_QUIET' in os.environ))
 
 # Then use the mode-specific parser to do the real parse
 modeArgs = args.modeParser.parse_args(extraArgs)
 
-# Special case the lock for --get-credentials; it needs to run while got is already locked
-lockBase = 'creds-lock' if modeArgs.handler == getCredential else 'lock'
-lock = LockFile(str(gotRoot / lockBase))
-lockTimeout = False
-
 # And pass those args to the mode's handler (don't pass 'handler', it's not a real argument)
-if args.unlock:
-	lock.break_lock()
-while not lock.i_am_locking():
-	try:
-		lock.acquire(3)
-	except LockTimeout:
-		if not lockTimeout:
-			lockTimeout = True
-			if verbose:
-				print("Waiting for lock... (pass --unlock if the lock is stale)", file = sys.stderr)
-
-db.load()
-try:
-	modeArgs.handler(**{k: v for k, v in vars(modeArgs).items() if k != 'handler'})
-finally:
-	lock.release()
+modeArgs.handler(**{k: v for k, v in vars(modeArgs).items() if k != 'handler'})

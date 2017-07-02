@@ -1,29 +1,36 @@
-from .DB import db
+from .DB import db, ActiveRecord
 
 import keyring
 from typing import *
+
+#TODO More secure password storage
+class Credential(ActiveRecord):
+	def __init__(self, service, username, password):
+		self.service = service
+		self.username = username
+		self.password = password
 
 class DBKeyring(keyring.backend.KeyringBackend):
 	priority = 1
 
 	def get_password(self, service, username):
-		if service not in db.credentials:
-			raise ValueError(f"No credential found for {service}")
-		return db.credentials[service]['password']
+		return Credential.load(service = service, username = username).password
 
 	def set_password(self, service, username, password):
-		db.credentials[service]['password'] = password
-		db.credentials.save()
+		cred = Credential.load(service = service, username = username)
+		cred.password = password
+		cred.save()
 
 	def delete_password(self, service, username):
-		if service in db.credentials:
-			db.credentials[service]['password'] = None
-			db.credentials.save()
+		self.set_password(service, username, None)
 
 # Actually integrating into the keyring's backend discovery seems impossible; it happens before we get a chance to actually create new classes, and then can't happen again even if requested. Instead we just check if the discovery failed and set DBKeyring as the backend if it did
 if isinstance(keyring.get_keyring(), keyring.backends.fail.Keyring):
 	keyring.set_keyring(DBKeyring())
 
+#TODO Rm this
+#TODO Rename file
+'''
 class Credentials:
 	def __init__(self):
 		pass
@@ -53,3 +60,4 @@ class Credentials:
 		return db.credentials.keys()
 
 credentials = Credentials()
+'''

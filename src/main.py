@@ -136,7 +136,7 @@ def where(repo: RepoSpec, format: str, on_uncloned: str, ensure_on_disk: bool = 
 	elif on_uncloned == 'fail':
 		raise RuntimeError(f"No local clone of {repo}")
 	elif on_uncloned == 'fake':
-		return str(Path(db.config['clone_root']) / '__REPO_NOT_FOUND__')
+		return formatRtn(repo, str(Path(db.config['clone_root']) / '__REPO_NOT_FOUND__'))
 
 	# If we don't have a matching clone, we need to find its host and clone it
 	host, url = findRepo(repo)
@@ -149,7 +149,8 @@ def where(repo: RepoSpec, format: str, on_uncloned: str, ensure_on_disk: bool = 
 	if localPath.is_dir():
 		if verbose:
 			print(f"{localPath} already exists; switching to here mode")
-		return here(repo, str(localPath), False)
+		here(repo, str(localPath), False)
+		return formatRtn(repo, str(localPath))
 
 	os.makedirs(localPath.parent, exist_ok = True)
 	if verbose:
@@ -167,7 +168,10 @@ def whereCLI(repos: List[List[RepoSpec]], format: str, on_uncloned: str, ensure_
 	repos = [spec for l in repos for spec in l]
 	if dest is not None and len(repos) > 1:
 		raise ValueError("Can't specify a clone destination with multiple repospecs")
-	return [where(repo, format, on_uncloned, ensure_on_disk, dest) for repo in repos]
+	rtn = [where(repo, format, on_uncloned, ensure_on_disk, dest) for repo in repos]
+	if format == 'json': # Convert the list of JSON strings into a JSON list
+		rtn = json.dumps([json.loads(e) for e in rtn])
+	return rtn
 
 def here(repo: RepoSpec, dir: str, force: bool) -> None:
 	if dir == '-':
@@ -208,14 +212,20 @@ def here(repo: RepoSpec, dir: str, force: bool) -> None:
 def what(dir: Optional[str]) -> Optional[str]:
 	root = findRoot(dir)
 	if root is None:
-		return
+		d = Path(dir) if dir is not None else Path.cwd()
+		raise RuntimeError(f"Not a got repository: {d.resolve()}")
 	path = Path(root).resolve()
 	for k, v in db.clones.items():
 		if Path(v).resolve() == path:
 			return k
+	# Shouldn't be able to get here
+	d  = Path(dir) if dir is not None else Path.cwd()
+	raise RuntimeError(f"Not a got repository: {d.resolve()}")
 
 def whence(repo: RepoSpec, format: str) -> str:
 	host, url = findRepo(repo)
+	if host is None:
+		raise RuntimeError(f"Unable to resolve repospec {repo}")
 	if format == 'plain':
 		if url is not None:
 			return url
@@ -309,8 +319,9 @@ def rmHost(name: str) -> None:
 
 def iterDeps(spec: Optional[str]) -> Iterable[Tuple[RepoSpec, str]]:
 	if spec is None:
-		spec = what(None)
-		if spec is None:
+		try:
+			spec = what(None)
+		except RuntimeError:
 			print("Current directory is not a tracked repository")
 			return
 
@@ -363,8 +374,6 @@ def gitPassthrough(directory: Optional[str], ignore_errors: bool, args: List[str
 
 	# Figure out the root repo
 	rootRepo = what(directory)
-	if rootRepo is None:
-		raise RuntimeError(f"Not a got repository: {Path(directory).resolve()}")
 
 	# Iterate over the root repo and its dependencies
 	failed = 0

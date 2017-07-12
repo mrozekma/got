@@ -14,7 +14,7 @@ class RepoSpec:
 		match = REPOSPEC_PATTERN.match(spec)
 		if match:
 			return RepoSpec(match.group(2), match.group(3), match.group(1))
-		raise ValueError(f"Invalid repo spec: {spec}")
+		raise ValueError(f"Invalid repospec: {spec}")
 
 	def str(self, includeHost: bool = True, includeRevision: bool = True):
 		return (f"{self.host}:" if includeHost and self.host else '') + self.name + (f"@{self.revision}" if includeRevision and self.revision else '')

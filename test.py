@@ -7,6 +7,7 @@ from json import loads as fromJS
 import junitxml
 import os
 from pathlib import Path
+import platform
 import re
 import shutil
 import subprocess
@@ -66,6 +67,10 @@ class GotRun:
 			stdout, stderr = self.proc.communicate()
 			self._stdout = stdout.decode('ascii')
 			self._stderr = stderr.decode('ascii')
+
+			# For some reason on Windows, stdout has an extra newline, and a couple of the tests are sensitive to it
+			if platform.system() == 'Windows' and self._stdout.endswith('\r\n'):
+				self._stdout = self._stdout[:-2]
 		return self._stdout
 
 	@property
@@ -77,6 +82,8 @@ class GotRun:
 
 	def __enter__(self):
 		args = [str(gotDir / 'got')] + [arg for arg in self.args if arg]
+		if platform.system() == 'Windows':
+			args[0] += '.bat'
 		env = os.environ.copy()
 		# The got root is the test case directory under runDir, but we might be in a subdirectory
 		root = Path.cwd()
@@ -86,7 +93,7 @@ class GotRun:
 					break
 			else:
 				raise RuntimeError(f"Current directory {Path.cwd().resolve()} is not within a test case rundir")
-		env['GOT_ROOT'] = root
+		env['GOT_ROOT'] = str(root)
 		print(f"Run: {args}")
 		print()
 		self.proc = subprocess.Popen(args, env = env, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
@@ -167,7 +174,7 @@ class Tests(TestCase):
 		for i in (1, 2, 3):
 			self.addHost('daemon', f"fake{i}", f"http://fake{i}", f"fake{i}", "pw", force = True)
 		self.addHost('bitbucket', 'fake-bitbucket', 'http://example.com', 'fake', 'pw', force = True)
-		expectedStdout = '\n'.join([
+		expectedStdout = os.linesep.join([
 			'    Name *Type *URL',
 			f"    bitbucket *bitbucket *{hostData['url']}",
 			r'\(!\) fake-bitbucket *bitbucket *http://example.com',
@@ -277,7 +284,7 @@ class Tests(TestCase):
 		with GotRun(repospecs + ['--format', format]) as r:
 			r.assertWorks() # This makes sure got has run and finished before we start checking the clone results below
 			if format == 'plain':
-				reportedClonePaths = r.stdout.strip().split('\n')
+				reportedClonePaths = r.stdout.strip().split(os.linesep)
 			elif format == 'json':
 				reportedClonePaths = [e['path'] for e in fromJS(r.stdout)]
 			else:
@@ -528,7 +535,7 @@ class Tests(TestCase):
 			with self.subTest(name = name):
 				with chdir(name):
 					with GotRun(['--deps']) as r:
-						self.assertEqual(set(r.stdout.strip().split('\n')), {str((testRoot / n).resolve()) for n in expectedDeps})
+						self.assertEqual(set(r.stdout.strip().split(os.linesep)), {str((testRoot / n).resolve()) for n in expectedDeps})
 						if len(expectedDeps) == 1:
 							r.assertInStderr(f"host:{name} has no dependencies file")
 
@@ -536,7 +543,7 @@ class Tests(TestCase):
 		self.deps_helper()
 		expectedDeps = {'repo2', 'repo4'}
 		with GotRun(['--deps', 'repo2']) as r:
-			self.assertEqual(set(r.stdout.strip().split('\n')), {str(Path(n).resolve()) for n in expectedDeps})
+			self.assertEqual(set(r.stdout.strip().split(os.linesep)), {str(Path(n).resolve()) for n in expectedDeps})
 
 	def test_deps_bad_repospec(self):
 		with GotRun(['--deps', 'bad_repospec']) as r:
@@ -552,7 +559,7 @@ class Tests(TestCase):
 				f"foo repo2 bar:host:repo2 -- {Path('repo2').resolve()}",
 				f"foo repo3 bar:host:repo3 -- {Path('repo3').resolve()}",
 			}
-			self.assertEqual(set(r.stdout.strip().split('\n')), expected)
+			self.assertEqual(set(r.stdout.strip().split(os.linesep)), expected)
 
 		with GotRun(['--deps', 'repo1', '--format', '%rs %h... %H']) as r:
 			expected = {
@@ -560,7 +567,7 @@ class Tests(TestCase):
 				f"repo2 {r2.head.commit.hexsha[:7]}... {r2.head.commit.hexsha}",
 				f"repo3 {r3.head.commit.hexsha[:7]}... {r3.head.commit.hexsha}",
 			}
-			self.assertEqual(set(r.stdout.strip().split('\n')), expected)
+			self.assertEqual(set(r.stdout.strip().split(os.linesep)), expected)
 
 	def test_deps_bad_format(self):
 		self.deps_helper()
@@ -573,7 +580,7 @@ class Tests(TestCase):
 		Path('repo3/deps.got').write_text('repo1\nrepo2\nrepo3\nrepo4')
 		with GotRun(['--deps', 'repo1', '--format', '%rs']) as r:
 			expected = {'repo1', 'repo2', 'repo3', 'repo4'}
-			self.assertEqual(set(r.stdout.strip().split('\n')), expected)
+			self.assertEqual(set(r.stdout.strip().split(os.linesep)), expected)
 
 	def git_helper(self):
 		self.addHost('daemon', 'host', 'http://localhost', 'user', 'pw', force = True)
@@ -606,7 +613,7 @@ class Tests(TestCase):
 					'host:repo2': f"{r2.head.commit.hexsha} refs/heads/master",
 					'host:repo3': f"{r3.head.commit.hexsha} refs/heads/master",
 				}
-				lines = [line for line in r.stdout.split('\n') if line]
+				lines = [line for line in r.stdout.split(os.linesep) if line]
 				actual = dict(zip(lines[::2], lines[1::2]))
 				self.assertEqual(expected, actual)
 
@@ -618,7 +625,7 @@ class Tests(TestCase):
 				'host:repo2': f"{r2.head.commit.hexsha} refs/heads/master",
 				'host:repo3': f"{r3.head.commit.hexsha} refs/heads/master",
 			}
-			lines = [line for line in r.stdout.split('\n') if line]
+			lines = [line for line in r.stdout.split(os.linesep) if line]
 			actual = dict(zip(lines[::2], lines[1::2]))
 			self.assertEqual(expected, actual)
 

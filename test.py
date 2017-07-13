@@ -1,6 +1,7 @@
 import argparse
 import colorama
 import contextlib
+import fnmatch
 import git
 import inspect
 from json import loads as fromJS
@@ -29,16 +30,6 @@ parser.add_argument('--verbose', '-v', action = 'store_true')
 parser.add_argument('--list', action = 'store_true', help = 'list test cases instead of running them')
 parser.add_argument('tests', nargs = '*')
 args, extraArgs = parser.parse_known_args()
-
-if args.tests:
-	def resolveTestName(name):
-		if name.startswith('Tests.test_'):
-			return name
-		elif name.startswith('test_'):
-			return 'Tests.' + name
-		else:
-			return 'Tests.test_' + name
-	extraArgs += map(resolveTestName, args.tests)
 
 gotDir = Path(__file__).resolve().parent
 runDir = Path(args.testrundir or tempfile.mkdtemp(prefix = 'got-testrundir')).resolve()
@@ -634,6 +625,111 @@ class Tests(TestCase):
 		with GotRun(['--git', '-C', 'repo1', '--ignore-errors', 'show', r2.head.commit.hexsha]) as r:
 			r.assertInStdout('Ignored error')
 
+	all_config_keys = ['clone_root']
+
+	def test_config_list_all(self):
+		with GotRun(['--config']) as r:
+			lines = r.stdout.strip().split(os.linesep)
+			vals = dict(line.split(' = ') for line in lines)
+			self.assertEqual(list(vals.keys()), self.all_config_keys)
+
+	def test_config_get(self):
+		with GotRun(['--config', 'clone_root']) as r:
+			val = r.stdout.strip()
+			self.assertEqual(val, str(Path('repos').resolve()))
+
+	def test_config_set(self):
+		with GotRun(['--config', 'clone_root', 'foobar']) as r:
+			r.assertInStdout(f"Old value: {Path('repos').resolve()}")
+			r.assertInStdout(f"New value: {Path('foobar').resolve()}")
+
+	def test_config_clone_root(self):
+		hostData = self.addBitbucketHost('bitbucket')
+		repospec1, repospec2 = hostData['repospecs'][:2]
+
+		# Before changing clone_root
+		cloneRoot = Path('repos').resolve()
+		with GotRun([repospec1]) as r:
+			clonePath = Path(r.stdout.strip()).resolve()
+			self.assertTrue(cloneRoot in clonePath.parents, f"{cloneRoot} is not a parent of {clonePath}")
+
+		# After changing clone_root
+		with GotRun(['--config', 'clone_root', 'foobar']):
+			pass
+		cloneRoot = Path('foobar').resolve()
+		with GotRun([repospec2]) as r:
+			clonePath = Path(r.stdout.strip()).resolve()
+			self.assertTrue(cloneRoot in clonePath.parents, f"{cloneRoot} is not a parent of {clonePath}")
+
+	def test_mv(self):
+		self.deps_helper()
+		with GotRun(['repo1']) as r:
+			clonePath = Path(r.stdout.strip())
+			self.assertTrue(clonePath.exists())
+		with GotRun(['--mv', 'repo1', 'new_dir']) as r:
+			r.assertInStdout('host:repo1 moved')
+		self.assertFalse(clonePath.exists())
+		with GotRun(['repo1']) as r:
+			clonePath = Path(r.stdout.strip())
+			self.assertTrue(clonePath.exists())
+			self.assertEqual(os.path.basename(clonePath), 'new_dir')
+
+	def test_mv_bad_repospec(self):
+		with GotRun(['bad_repospec', 'dst']) as r:
+			r.assertFails()
+
+	def test_mv_dest_exists(self):
+		self.deps_helper()
+		Path('new_path').touch()
+		with GotRun(['--mv', 'repo1', 'new_path']) as r:
+			r.assertFails()
+			r.assertInStderr('Destination already exists')
+
+	def test_find_root_cwd(self):
+		self.deps_helper()
+		with chdir('repo1'):
+			with GotRun(['--find-root']) as r:
+				expected = Path.cwd().resolve()
+				actual = Path(r.stdout.strip())
+				self.assertEqual(expected, actual)
+
+	def test_find_root_dir(self):
+		self.deps_helper()
+		with GotRun(['--find-root', 'repo1']) as r:
+			expected = Path('repo1').resolve()
+			actual = Path(r.stdout.strip())
+			self.assertEqual(expected, actual)
+
+	def test_find_root_subdir(self):
+		self.deps_helper()
+		Path('repo1/subdir').mkdir()
+		with GotRun(['--find-root', 'repo1/subdir']) as r:
+			expected = Path('repo1').resolve()
+			actual = Path(r.stdout.strip())
+			self.assertEqual(expected, actual)
+
+	def test_find_root_bad_dir(self):
+		with GotRun(['--find-root']) as r:
+			r.assertFails()
+			r.assertInStderr(f"{Path.cwd().resolve()} is not within a got repository")
+
+	def test_prune(self):
+		self.deps_helper()
+		with GotRun(['--prune']) as r:
+			r.assertInStdout('Removed 0, kept 4')
+		shutil.rmtree('repo2')
+		shutil.rmtree('repo3')
+		shutil.rmtree('repo4')
+		with GotRun(['--prune']) as r:
+			r.assertInStdout('Removed 3, kept 1')
+			r.assertInStdout('Removed host:repo2')
+			r.assertInStdout('Removed host:repo3')
+			r.assertInStdout('Removed host:repo4')
+		with GotRun(['--prune']) as r:
+			r.assertInStdout('Removed 0, kept 1')
+
+	#TODO Test --prune --interactive? No ability to control stdin yet
+
 @contextlib.contextmanager
 def chdir(path):
 	old = Path.cwd()
@@ -642,6 +738,20 @@ def chdir(path):
 		yield
 	finally:
 		os.chdir(old)
+
+if args.tests:
+	for name in args.tests:
+		if name.startswith('Tests.test_'):
+			pass
+		elif name.startswith('test_'):
+			name = 'Tests.' + name
+		else:
+			name = 'Tests.test_' + name
+		if '*' in name:
+			ptn = name[6:]
+			extraArgs += ['Tests.' + n for n in dir(Tests) if fnmatch.fnmatchcase(n, ptn)]
+		else:
+			extraArgs.append(name)
 
 # Wrap each test method so it prints its name and switches to a dedicated result directory
 for n in dir(Tests):

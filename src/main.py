@@ -417,7 +417,7 @@ def config(key: Optional[str], value: Optional[str]) -> None:
 			print(db.config[key])
 		else:
 			print(f"Old value: {db.config[key]}")
-			db.config[key] = value
+			db.config[key] = str(Path(value).resolve())
 			print(f"New value: {db.config[key]}")
 
 def mv(repospec: RepoSpec, dest: str) -> None:
@@ -522,7 +522,7 @@ mvParser.add_argument('repospec', type = type_repospec)
 mvParser.add_argument('dest')
 
 findRootParser = makeMode('find-root', print_return(findRoot, '%(dir)s is not within a got repository'), 'find the root of a clone given a path within it')
-findRootParser.add_argument('dir', nargs = '?', default = None, help = 'directory to start from')
+findRootParser.add_argument('dir', nargs = '?', default = str(Path.cwd()), help = 'directory to start from')
 
 pruneParser = makeMode('prune', prune, 'unregister clones that no longer exist on disk')
 pruneParser.add_argument('-i', '--interactive', action = 'store_true', help = 'prompt before unregistering missing clones')

@@ -1,11 +1,12 @@
 import abc
+from contextlib import contextmanager
 import git
 import os
 import re
 import stashy
 
 from .Credential import Credential
-from .DB import ActiveRecord
+from .DB import db, ActiveRecord
 from .utils import makeGitEnvironment
 
 class Host(abc.ABC):
@@ -61,6 +62,12 @@ class SubclassableHost:
 
 	def getCredential(self):
 		return Credential.load(self.name, self.username)
+
+	# The necessity of locking hosts is debatable, but the framework is there so I did it
+	@contextmanager
+	def lock(self):
+		with db.lock(f"host.{self.name}"):
+			yield
 
 	@classmethod
 	def __init_subclass__(cls):

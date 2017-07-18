@@ -1,5 +1,6 @@
-from .DB import registerType
+from .DB import db, registerType
 
+from contextlib import contextmanager
 import re
 
 HOST_PATTERN = '[a-zA-Z0-9_-]+'
@@ -29,5 +30,12 @@ class RepoSpec:
 
 	def __hash__(self):
 		return hash(str(self))
+
+	@contextmanager
+	def lock(self):
+		# This leaves the host out of the lock name because the host isn't always set in the instance
+		# This means foo:repo1 and bar:repo1 will share the same lock and might wait on each other unnecessarily, but I'm willing to live with that
+		with db.lock(f"repo.{self.str(includeHost = False)}"):
+			yield
 
 registerType(RepoSpec, str, RepoSpec.fromStr)

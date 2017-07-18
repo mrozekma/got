@@ -2,13 +2,13 @@ import argparse
 from getpass import getpass
 import git
 import json
-from lockfile import LockFile, LockTimeout
 import os
 from pathlib import Path
 import re
 import shutil
 import string
 import sys
+import time
 
 from .DB import db, gotRoot
 from .Credential import Credential
@@ -122,19 +122,24 @@ def where(repo: RepoSpec, format: str, on_uncloned: str, ensure_on_disk: bool = 
 		elif format == 'json':
 			return json.dumps({'repospec': str(clone.repospec), 'path': str(clone.path)})
 
-	# Ambiguous repospecs are a problem. If 'repo' lacks a host, and we can find exactly one matching clone, we use it
-	candidates = list(Clone.loadSpec(repo))
-	if len(candidates) == 1:
-		clone = candidates[0]
-		# Make sure the local path actually exists
-		if not ensure_on_disk or clone.path.is_dir():
-			return formatRtn(clone)
+	def lookupRepo():
+		# Ambiguous repospecs are a problem. If 'repo' lacks a host, and we can find exactly one matching clone, we use it
+		candidates = list(Clone.loadSpec(repo))
+		if len(candidates) == 1:
+			clone = candidates[0]
+			# Make sure the local path actually exists
+			if not ensure_on_disk or clone.path.is_dir():
+				return formatRtn(clone)
+			elif verbose(1):
+				print(f"{repo}: local clone `{clone.path}' no longer exists")
+		elif len(candidates) > 1:
+			raise RuntimeError(f"{repo}: Ambiguous repospec matches multiple clones: {', '.join(clone.repospec for clone in candidates)}")
 		elif verbose(1):
-			print(f"{repo}: local clone `{clone.path}' no longer exists")
-	elif len(candidates) > 1:
-		raise RuntimeError(f"{repo}: Ambiguous repospec matches multiple clones: {', '.join(clone.repospec for clone in candidates)}")
-	elif verbose(1):
-		print(f"{repo}: no local clone on record")
+			print(f"{repo}: no local clone on record")
+
+	rtn = lookupRepo()
+	if rtn is not None:
+		return rtn
 
 	if on_uncloned == 'skip':
 		return
@@ -150,25 +155,31 @@ def where(repo: RepoSpec, format: str, on_uncloned: str, ensure_on_disk: bool = 
 	if repo.host is None:
 		repo.host = host.name
 
-	localPath = Path(dest) if dest else Path(config.clone_root) / host.name / (f"{repo.name}@{repo.revision}" if repo.revision is not None else repo.name)
-	if localPath.is_dir():
+	with repo.lock():
+		# We intentionally delay locking until after confirming the repo doesn't exist, but now that we're in the critical section we need to check again
+		rtn = lookupRepo()
+		if rtn is not None:
+			return rtn
+
+		localPath = Path(dest) if dest else Path(config.clone_root) / host.name / (f"{repo.name}@{repo.revision}" if repo.revision is not None else repo.name)
+		if localPath.is_dir():
+			if verbose(1):
+				print(f"{localPath} already exists; switching to here mode")
+			clone = here(repo, str(localPath), False)
+			return formatRtn(clone)
+
+		os.makedirs(localPath.parent, exist_ok = True)
 		if verbose(1):
-			print(f"{localPath} already exists; switching to here mode")
-		clone = here(repo, str(localPath), False)
+			print(f"Cloning {url} to {localPath}")
+		git.Repo.clone_from(url, str(localPath), env = makeGitEnvironment(host.name))
+		if repo.revision is not None:
+			r = git.Repo(str(localPath))
+			r.head.reference = r.commit(repo.revision)
+			r.head.reset(index = True, working_tree = True)
+
+		clone = Clone(repo, localPath)
+		clone.save()
 		return formatRtn(clone)
-
-	os.makedirs(localPath.parent, exist_ok = True)
-	if verbose(1):
-		print(f"Cloning {url} to {localPath}")
-	git.Repo.clone_from(url, str(localPath), env = makeGitEnvironment(host.name))
-	if repo.revision is not None:
-		r = git.Repo(str(localPath))
-		r.head.reference = r.commit(repo.revision)
-		r.head.reset(index = True, working_tree = True)
-
-	clone = Clone(repo, localPath)
-	clone.save()
-	return formatRtn(clone)
 
 # This is an adapter for command-line where mode. 'repos' comes from an argument of type 'multipart_repospec' with '+' nargs, so it's a list of lists of repospecs that needs to be flattened and passed to where() individually
 def whereCLI(repos: List[List[RepoSpec]], format: str, on_uncloned: str, ensure_on_disk: bool = True, dest: bool = None):
@@ -181,41 +192,42 @@ def whereCLI(repos: List[List[RepoSpec]], format: str, on_uncloned: str, ensure_
 	return rtn
 
 def here(repo: RepoSpec, dir: str, force: bool) -> Optional[Clone]:
-	if dir == '-':
-		existing: Clone = where(repo, 'py', 'skip', False)
-		if existing:
-			existing.delete()
-			print(f"{existing.repospec} no longer has a registered local clone")
-			if existing.path.exists():
-				print(f"(old path still exists on disk: {existing.path})")
-		return
+	with repo.lock():
+		if dir == '-':
+			existing: Clone = where(repo, 'py', 'skip', False)
+			if existing:
+				existing.delete()
+				print(f"{existing.repospec} no longer has a registered local clone")
+				if existing.path.exists():
+					print(f"(old path still exists on disk: {existing.path})")
+			return
 
-	if repo.host is None:
-		raise ValueError(f"{repo} does not specify the host; it should be of the form <host>:{repo}")
+		if repo.host is None:
+			raise ValueError(f"{repo} does not specify the host; it should be of the form <host>:{repo}")
 
-	dir = Path(dir).resolve()
-	if not force:
-		existing: Clone = where(repo, 'py', 'skip')
-		if existing:
-			raise ValueError(f"{repo} is already mapped to {existing.path}")
-		cloneUrl = Host.load(name = repo.host).getCloneURL(repo.name)
+		dir = Path(dir).resolve()
+		if not force:
+			existing: Clone = where(repo, 'py', 'skip')
+			if existing:
+				raise ValueError(f"{repo} is already mapped to {existing.path}")
+			cloneUrl = Host.load(name = repo.host).getCloneURL(repo.name)
 
-		if not dir.exists():
-			raise ValueError(f"Path not found: {dir}")
-		try:
-			r = git.Repo(str(dir))
-		except git.InvalidGitRepositoryError:
-			raise ValueError(f"Path is not a git repository: {dir}")
-		try:
-			if not cloneUrl in r.remotes['origin'].urls:
-				raise ValueError(f"Repository does not have the correct origin URL: {cloneUrl}")
-		except IndexError:
-			raise ValueError(f"Repository has no origin: {dir}")
+			if not dir.exists():
+				raise ValueError(f"Path not found: {dir}")
+			try:
+				r = git.Repo(str(dir))
+			except git.InvalidGitRepositoryError:
+				raise ValueError(f"Path is not a git repository: {dir}")
+			try:
+				if not cloneUrl in r.remotes['origin'].urls:
+					raise ValueError(f"Repository does not have the correct origin URL: {cloneUrl}")
+			except IndexError:
+				raise ValueError(f"Repository has no origin: {dir}")
 
-	rtn = Clone(repo, dir)
-	rtn.save()
-	print(f"{repo} is located at {dir}")
-	return rtn
+		rtn = Clone(repo, dir)
+		rtn.save()
+		print(f"{repo} is located at {dir}")
+		return rtn
 
 def what(dir: Optional[str]) -> Optional[RepoSpec]:
 	path = findRoot(dir)
@@ -254,34 +266,35 @@ def showHosts(format: str) -> None:
 			try:
 				host.check()
 				valid = True
-			except Exception:
+			except:
 				valid = False
 			print(f"{'   ' if valid else '(!)'} {host.name:30} {host.type:20} {host.url}")
 	elif format == 'json':
 		print(json.dumps({host.name: {'type': host.type, 'url': host.url} for host in Host.loadAll()}))
 
 def addHost(name: str, url: str, type: str, username: str, password: str, force: bool) -> None:
-	host = Host.tryLoad(name = name)
-	if host is not None:
-		raise RuntimeError(f"Unable to add host: name `{name}' already mapped to {host.url}")
-	if password == '-':
-		password = getpass()
+	host = Host(name, type, url, username)
+	with host.lock():
+		existingHost = Host.tryLoad(name = name)
+		if existingHost is not None:
+			raise RuntimeError(f"Unable to add host: name `{name}' already mapped to {existingHost.url}")
+		if password == '-':
+			password = getpass()
 
-	with db.transaction():
-		cred = Credential(name, username, password)
-		cred.save()
-		host = Host(name, type, url, username)
-		# Make sure the host is valid
-		try:
-			host.check()
-		except ConnectionError as e:
-			if force:
-				print(f"Host error (continuing anyway): {e}")
-			else:
-				raise ConnectionError(f"Unable to add host: {e}")
+		with db.transaction():
+			cred = Credential(name, username, password)
+			cred.save()
+			# Make sure the host is valid
+			try:
+				host.check()
+			except ConnectionError as e:
+				if force:
+					print(f"Host error (continuing anyway): {e}")
+				else:
+					raise ConnectionError(f"Unable to add host: {e}")
 
-		# Save
-		host.save()
+			# Save
+			host.save()
 	print(f"Added {type} host {name} at {url}")
 
 def editHost(name: str, new_url: Optional[str], new_username: Optional[str], new_password: Optional[str], force: bool) -> None:
@@ -291,32 +304,33 @@ def editHost(name: str, new_url: Optional[str], new_username: Optional[str], new
 	if new_password == '-':
 		new_password = getpass()
 
-	with db.transaction():
-		if new_url is not None:
-			host.url = new_url
-			print(f"  New URL: {new_url}")
-		if new_username is not None:
-			# The username is stored in both the hosts table and the keyring, so we need to delete the credential and make a new one, but first we need to pull the password out of the keyring so we can put it back with the new username
-			password = host.password
-			host.getCredential().delete()
-			Credential(host.name, new_username, password).save()
-			host.username = new_username
-			print(f"  New username: {new_username}")
-		if new_password is not None:
-			cred = host.getCredential()
-			cred.password = new_password
-			cred.save()
-			print("  New password: ***")
+	with host.lock():
+		with db.transaction():
+			if new_url is not None:
+				host.url = new_url
+				print(f"  New URL: {new_url}")
+			if new_username is not None:
+				# The username is stored in both the hosts table and the keyring, so we need to delete the credential and make a new one, but first we need to pull the password out of the keyring so we can put it back with the new username
+				password = host.password
+				host.getCredential().delete()
+				Credential(host.name, new_username, password).save()
+				host.username = new_username
+				print(f"  New username: {new_username}")
+			if new_password is not None:
+				cred = host.getCredential()
+				cred.password = new_password
+				cred.save()
+				print("  New password: ***")
 
-		try:
-			host.check()
-		except ConnectionError as e:
-			if force:
-				print(f"Host error (editing anyway): {e}")
-			else:
-				raise ConnectionError(f"Unable to edit host: {e}")
+			try:
+				host.check()
+			except ConnectionError as e:
+				if force:
+					print(f"Host error (editing anyway): {e}")
+				else:
+					raise ConnectionError(f"Unable to edit host: {e}")
 
-		host.save()
+			host.save()
 
 def rmHost(name: str) -> None:
 	host = Host.load(name = name, err = f"No host named {name}")
@@ -432,20 +446,21 @@ def configCLI(key: Optional[str], value: Optional[str]) -> None:
 			print(f"New value: {newValue}")
 
 def mv(repospec: RepoSpec, dest: str) -> None:
-	clone: Clone = where(repospec, 'py', 'skip')
-	if clone is None:
-		raise ValueError(f"No clone found for {repospec}") from None
-	repospec, src = clone.repospec, clone.path
-	dest = Path(dest).resolve()
-	if dest.exists():
-		if not dest.is_dir():
-			raise ValueError(f"Destination already exists: {dest}")
-		dest /= os.path.basename(dest)
+	with repospec.lock():
+		clone: Clone = where(repospec, 'py', 'skip')
+		if clone is None:
+			raise ValueError(f"No clone found for {repospec}") from None
+		repospec, src = clone.repospec, clone.path
+		dest = Path(dest).resolve()
 		if dest.exists():
-			raise ValueError(f"Destination already exists: {dest}")
-	shutil.move(src, dest)
-	clone.path = dest
-	clone.save()
+			if not dest.is_dir():
+				raise ValueError(f"Destination already exists: {dest}")
+			dest /= os.path.basename(dest)
+			if dest.exists():
+				raise ValueError(f"Destination already exists: {dest}")
+		shutil.move(src, dest)
+		clone.path = dest
+		clone.save()
 	print(f"{repospec} moved to {dest}")
 
 def findRoot(dir: Optional[str]) -> Optional[Path]:
@@ -474,6 +489,13 @@ def prune(interactive: bool) -> None:
 
 def getCredential(host: str) -> None:
 	print(Host.load(name = host).password)
+
+def makeLock(key = 'test-lock') -> None:
+	with db.lock(key):
+		print(f"{os.getpid()}: Locked")
+		with db.lock(key, 2):
+			print(f"{os.getpid()}: Locked again. Sleeping...")
+			time.sleep(5)
 
 whereParser = makeMode('where', print_return(whereCLI), 'find the local path to a package, cloning it from a git host if necessary', ['local'])
 whereParser.add_argument('repos', nargs = '+', type = type_multipart_repospec)
@@ -544,6 +566,9 @@ pruneParser.add_argument('-i', '--interactive', action = 'store_true', help = 'p
 # This is used by git-credential, it's not meant for direct user interaction
 getCredentialParser = makeMode('get-credential', getCredential, argparse.SUPPRESS)
 getCredentialParser.add_argument('host')
+
+# This is just for testing
+# lockParser = makeMode('lock', makeLock, argparse.SUPPRESS)
 
 # Running with no arguments (or with just -h/--help) will silently pick --where and then give you the help output for that mode, which is confusing. Print the general help instead
 if len(sys.argv) == 1 or (len(sys.argv) == 2 and sys.argv[1] in ('-h', '--help')):

@@ -1,31 +1,12 @@
-'''
-Operations:
-
-keys
-values (?)
-get
-set
-del
-iter
-in
-
-hosts.getJSON
-
-config: keys, get, iter, in, set
-hosts: keys, getJSON, in, get, set, del
-remotes: 
-clones: keys, get, set, del, iter, values
-credentials: 
-'''
-
 from contextlib import contextmanager
 import inspect
-import json
 import os
 from pathlib import Path
+import psutil
 import re
 import sqlite3
 import sys
+import time
 import traceback
 from typing import *
 
@@ -61,10 +42,55 @@ class DB:
 			self.conn.isolation_level = oldLevel
 
 	@contextmanager
+	def lock(self, key, timeout = None, reentrant = True):
+		self.update("CREATE TABLE IF NOT EXISTS locks(key text primary key, pid int, count int)")
+		pid = os.getpid()
+		tries = 0
+		while True:
+			with self.transaction(True):
+				owner = None
+				for row in self.selectRow("SELECT pid FROM locks WHERE key = ?", key):
+					if psutil.pid_exists(row['pid']):
+						owner = row['pid']
+				if owner is None:
+					if verbose(3):
+						print(f"Acquired lock `{key}'", file = sys.stderr)
+					self.update("INSERT OR REPLACE INTO locks(key, pid, count) VALUES(?, ?, 1)", key, pid)
+					break
+				elif reentrant and owner == pid:
+					if verbose(3):
+						print(f"Re-entered already owned lock `{key}'", file = sys.stderr)
+					self.update("UPDATE locks SET count = count + 1 WHERE key = ? AND pid = ?", key, pid)
+					break
+			if verbose(3):
+				print(f"Failed to acquired lock `{key}': held by {owner}", file = sys.stderr)
+			if timeout is not None and tries >= timeout:
+				raise TimeoutError(f"Unable to acquire lock ({key} held by {owner})")
+			tries += 1
+			if tries == 3 and verbose(1):
+				try:
+					proc = psutil.Process(owner)
+					parent = proc.parent()
+					print(f"Waiting for lock... (held by {owner}, run by {parent.pid} ({parent.name()}))", file = sys.stderr)
+				except Exception: # 'owner' might have ended, or be restricted, or its parent might be unavailable
+					print(f"Waiting for lock... (held by {owner})", file = sys.stderr)
+			time.sleep(1)
+
+		try:
+			# We have the lock; run caller body
+			yield
+		finally:
+			# Release the lock
+			self.update("UPDATE locks SET count = count - 1 WHERE key = ? AND pid = ?", key, pid)
+			self.update("DELETE FROM locks WHERE key = ? AND pid = ? AND count = 0", key, pid)
+			if verbose(3):
+				print(f"Released lock `{key}'", file = sys.stderr)
+
+	@contextmanager
 	def cursor(self, expr = None, *args) -> sqlite3.Cursor:
 		if verbose(3):
 			pargs = [str(arg) for arg in args]
-			stack = [f"{os.path.basename(frame.filename)}:{frame.lineno} {frame.name}" for frame in traceback.extract_stack(limit = 10)]
+			stack = [f"{os.path.basename(frame.filename)}:{frame.lineno} {frame.name}" for frame in traceback.extract_stack(limit = 15)]
 			width = max(len(expr or ''), *[len(i) for i in pargs], *[len(i) for i in stack])
 
 			print(file = sys.stderr)

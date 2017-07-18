@@ -1,4 +1,4 @@
 gitpython # git
 keyring
-lockfile
+psutil
 stashy

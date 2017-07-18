@@ -11,10 +11,10 @@ import string
 import sys
 
 from .DB import db, gotRoot
-from .Credentials import Credential
+from .Credential import Credential
 from .Config import config
 from .Clone import Clone
-from .Host import Host, BitbucketHost
+from .Host import Host
 
 from .RepoSpec import RepoSpec, HOST_PATTERN
 from .utils import print_return, makeGitEnvironment, verbose
@@ -267,18 +267,21 @@ def addHost(name: str, url: str, type: str, username: str, password: str, force:
 	if password == '-':
 		password = getpass()
 
-	host = Host(name, type, url, username, password)
-	# Make sure the host is valid
-	try:
-		host.check()
-	except ConnectionError as e:
-		if force:
-			print(f"Host error (continuing anyway): {e}")
-		else:
-			raise ConnectionError(f"Unable to add host: {e}")
+	with db.transaction():
+		cred = Credential(name, username, password)
+		cred.save()
+		host = Host(name, type, url, username)
+		# Make sure the host is valid
+		try:
+			host.check()
+		except ConnectionError as e:
+			if force:
+				print(f"Host error (continuing anyway): {e}")
+			else:
+				raise ConnectionError(f"Unable to add host: {e}")
 
-	# Save
-	host.save()
+		# Save
+		host.save()
 	print(f"Added {type} host {name} at {url}")
 
 def editHost(name: str, new_url: Optional[str], new_username: Optional[str], new_password: Optional[str], force: bool) -> None:
@@ -288,29 +291,32 @@ def editHost(name: str, new_url: Optional[str], new_username: Optional[str], new
 	if new_password == '-':
 		new_password = getpass()
 
-	# Mutable fields
-	fields = [
-		('url', new_url),
-		('username', new_username),
-		('password', new_password),
-	]
+	with db.transaction():
+		if new_url is not None:
+			host.url = new_url
+			print(f"  New URL: {new_url}")
+		if new_username is not None:
+			# The username is stored in both the hosts table and the keyring, so we need to delete the credential and make a new one, but first we need to pull the password out of the keyring so we can put it back with the new username
+			password = host.password
+			host.getCredential().delete()
+			Credential(host.name, new_username, password).save()
+			host.username = new_username
+			print(f"  New username: {new_username}")
+		if new_password is not None:
+			cred = host.getCredential()
+			cred.password = new_password
+			cred.save()
+			print("  New password: ***")
 
-	for field, newVal in fields:
-		if newVal is not None:
-			setattr(host, field, newVal)
-			print(f"  New {field}: {'***' if field == 'password' else newVal}")
-			if field == 'url':
-				print("    Warning: Existing clones will still point to the old remote URL")
+		try:
+			host.check()
+		except ConnectionError as e:
+			if force:
+				print(f"Host error (editing anyway): {e}")
+			else:
+				raise ConnectionError(f"Unable to edit host: {e}")
 
-	try:
-		host.check()
-	except ConnectionError as e:
-		if force:
-			print(f"Host error (editing anyway): {e}")
-		else:
-			raise ConnectionError(f"Unable to edit host: {e}")
-
-	host.save()
+		host.save()
 
 def rmHost(name: str) -> None:
 	host = Host.load(name = name, err = f"No host named {name}")

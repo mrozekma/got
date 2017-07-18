@@ -4,7 +4,7 @@ import os
 import re
 import stashy
 
-#from .Credentials import credentials
+from .Credential import Credential
 from .DB import ActiveRecord
 from .utils import makeGitEnvironment
 
@@ -48,8 +48,19 @@ class Host(abc.ABC):
 
 # Concrete hosts don't subclass Host because __new__ interferes with their construction
 class SubclassableHost:
-	def __init__(self):
+	def __init__(self, name, url, username):
 		self.type = self.getType()
+		self.name = name
+		self.url = url.rstrip('/')
+		self.username = username
+
+	# This doesn't implement setting the password because it would need to wait until the host's save() method is called. Changing the password should be done via the Credential interface directly
+	@property
+	def password(self):
+		return self.getCredential().password
+
+	def getCredential(self):
+		return Credential.load(self.name, self.username)
 
 	@classmethod
 	def __init_subclass__(cls):
@@ -67,28 +78,10 @@ class SubclassableHost:
 	def check(self):
 		pass
 
-#TODO Rm this
-	'''
-	@staticmethod
-	def fromDB(name):
-		kw = {}
-		try:
-			kw.update(db.hosts[name])
-		except KeyError:
-			raise ValueError(f"No host named {name}")
-		if name in credentials:
-			kw['username'], kw['password'] = credentials[name]
-		return Host(name, **kw)
-	'''
-
 class BitbucketHost(SubclassableHost, ActiveRecord):
-	def __init__(self, name, url, username, password):
-		super().__init__()
+	def __init__(self, name, url, username):
 		self._conn = None # Lazy loaded via self.conn property
-		self.name = name
-		self.url = url.rstrip('/')
-		self.username = username
-		self.password = password
+		super().__init__(name, url, username)
 
 	@property
 	def conn(self):
@@ -99,7 +92,8 @@ class BitbucketHost(SubclassableHost, ActiveRecord):
 	def __setattr__(self, k, v):
 		super().__setattr__(k, v)
 		# Invalidate connection if any of the connection parameters have changed
-		if k in ('url', 'username', 'password'):
+		# This can't see password changes, so the main script is careful to set 'username' when the password changes
+		if k in ('url', 'username'):
 			self._conn = None
 
 	def check(self):
@@ -147,12 +141,8 @@ class BitbucketHost(SubclassableHost, ActiveRecord):
 			raise ConnectionError("Invalid/insufficient credentials")
 
 class DaemonHost(SubclassableHost, ActiveRecord):
-	def __init__(self, name, url, username, password):
-		super().__init__()
-		self.name = name
-		self.url = url.rstrip('/')
-		self.username = username
-		self.password = password
+	def __init__(self, name, url, username):
+		super().__init__(name, url, username)
 
 	def getType(self = None):
 		return 'daemon'

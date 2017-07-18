@@ -45,6 +45,20 @@ class DB:
 		self.isNew = not path.exists()
 		self.conn = sqlite3.connect(str(path))
 		self.conn.row_factory = sqlite3.Row
+		self.conn.isolation_level = None
+
+		if self.isNew:
+			self.update("PRAGMA user_version = 1")
+
+	@contextmanager
+	def transaction(self, exclusive = False):
+		oldLevel = self.conn.isolation_level # This is almost certainly None, which is auto-commit mode
+		self.conn.isolation_level = 'EXCLUSIVE' if exclusive else '' # Empty string is regular transactional mode
+		try:
+			with self.conn:
+				yield
+		finally:
+			self.conn.isolation_level = oldLevel
 
 	@contextmanager
 	def cursor(self, expr = None, *args) -> sqlite3.Cursor:
@@ -90,8 +104,8 @@ class DB:
 			return bool(cur.fetchone())
 
 	def update(self, expr, *args):
-		with self.cursor(expr, *args) as cur:
-			self.conn.commit()
+		with self.cursor(expr, *args):
+			pass
 
 class ActiveRecord:
 	registeredTypes = set()

@@ -233,7 +233,7 @@ class Tests(TestCase):
 	def test_edit_host_new_url(self):
 		self.addBitbucketHost('bitbucket')
 		with GotRun(['--edit-host', 'bitbucket', '--new-url', 'http://example.com', '--force']) as r:
-			r.assertInStdout('New url: http://example.com')
+			r.assertInStdout('New URL: http://example.com')
 
 	def test_edit_host_new_username(self):
 		hostData = self.addBitbucketHost('bitbucket')

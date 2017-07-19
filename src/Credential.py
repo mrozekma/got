@@ -27,7 +27,8 @@ class KeyringCredential:
 
 	@staticmethod
 	def load(host_name, username):
-		return KeyringCredential(host_name, username, keyring.get_password(host_name, username))
+		password = keyring.get_password(host_name, username)
+		return KeyringCredential(host_name, username, password) if password is not None else None
 
 	def save(self):
 		keyring.set_password(self.host_name, self.username, self.password)

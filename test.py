@@ -4,8 +4,9 @@ import contextlib
 import fnmatch
 import git
 import inspect
-from json import loads as fromJS
+from json import loads as fromJS, dumps as toJS
 import junitxml
+import keyring
 import os
 from pathlib import Path
 import platform
@@ -16,6 +17,7 @@ import sys
 import tempfile
 from typing import *
 from unittest import main, TestCase, TextTestRunner
+import zipfile
 
 #TODO Write XML to a file, embed stdout/stderr in the results
 class JUnitRunner(TextTestRunner):
@@ -729,6 +731,61 @@ class Tests(TestCase):
 			r.assertInStdout('Removed 0, kept 1')
 
 	#TODO Test --prune --interactive? No ability to control stdin yet
+
+	def test_db_v0_to_v1(self):
+		Path('hosts.json').write_text(toJS({
+			'host1': {
+				'type': 'bitbucket',
+				'url': 'http://bad-host/one',
+			},
+			'host2': {
+				'type': 'daemon',
+				'url': 'http://bad-host/two',
+			},
+		}))
+		useKeyring = not isinstance(keyring.get_keyring(), keyring.backends.fail.Keyring)
+		Path('credentials.json').write_text(toJS({
+			'host1': {
+				'username': 'user1',
+				'password': '' if useKeyring else 'pass1',
+			},
+			'host2': {
+				'username': 'user2',
+				'password': '' if useKeyring else 'pass2',
+			},
+		}))
+		if useKeyring:
+			keyring.set_password('host1', 'user1', 'pass1')
+			keyring.set_password('host2', 'user2', 'pass2')
+		Path('clones.json').write_text(toJS({
+			'host1:project/repo': 'repo1',
+			'host2:project/repo2@000000': 'repo2',
+		}))
+		Path('repo1').mkdir()
+		Path('repo2').mkdir()
+
+		expectedStdout = os.linesep.join([
+			'    Name *Type *URL',
+			r'\(!\) host1 *bitbucket *http://bad-host/one',
+			'    host2 *daemon *http://bad-host/two',
+		])
+		with GotRun(['--hosts']) as r:
+			r.assertInStderr('Imported old JSON database')
+			r.assertStdoutMatches(expectedStdout + '$')
+
+		self.assertFalse(Path('hosts.json').exists())
+		self.assertFalse(Path('credentials.json').exists())
+		self.assertFalse(Path('clones.json').exists())
+		self.assertTrue(Path('old_database.zip').exists())
+		with zipfile.ZipFile('old_database.zip') as zip:
+			self.assertEqual({'hosts.json', 'credentials.json', 'clones.json'}, set(zip.namelist()))
+
+		with GotRun(['project/repo']) as r:
+			r.assertStdoutMatches('repo1')
+		with GotRun(['project/repo2@000000']) as r:
+			r.assertStdoutMatches('repo2')
+		with GotRun(['project/repo2']) as r:
+			r.assertFails()
 
 @contextlib.contextmanager
 def chdir(path):

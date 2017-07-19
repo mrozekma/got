@@ -30,9 +30,6 @@ del verbosity
 if __name__ == '__main__':
 	try:
 		from src import dependencies
-		from src import DB
-		if verbose(1) and DB.db.isNew:
-			print("New database created at %s" % DB.db.path, file = sys.stderr)
 		from src import main
 	except Exception as e:
 		print("Fatal error: %s" % e, file = sys.stderr)

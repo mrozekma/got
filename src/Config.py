@@ -15,11 +15,9 @@ class Config(ActiveRecord):
 		if key not in DEFAULT_CONFIG:
 			raise ValueError(f"Unrecognized configuration key: {key}")
 
-	@classmethod
-	def createTable(cls):
-		super().createTable()
-		for k, v in DEFAULT_CONFIG.items():
-			cls(k, v).save()
+	@staticmethod
+	def table():
+		return 'config'
 
 # Config is always string keys -> string values, and the key set is fixed, so browsing it as a namespace is convenient
 class ConfigInterface:

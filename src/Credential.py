@@ -17,7 +17,7 @@ class DBCredential(ActiveRecord):
 
 	@staticmethod
 	def table():
-		return 'credential'
+		return 'credentials'
 
 class KeyringCredential:
 	def __init__(self, host_name, username, password):

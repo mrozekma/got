@@ -12,38 +12,123 @@ from typing import *
 
 from .utils import gotRoot, verbose
 
-'''
-		self.config = DBFile(self.dir / 'config.json', 'config key', defaultData = DEFAULT_CONFIG)
-		self.hosts = DBFile(self.dir / 'hosts.json', 'host')
-		self.remotes = DBFile(self.dir / 'remotes.json', 'remote')
-		self.clones = DBFile(self.dir / 'clones.json', 'clone')
-		self.credentials = DBFile(self.dir / 'credentials.json', 'credential', secure = True)
-'''
+schemaUpdates = [None]
+def schemaUpdate(f):
+	schemaUpdates.append(f)
+	return f
+
+@schemaUpdate
+def v1(db):
+	# First sqlite database. Make all the tables
+	db.update("CREATE TABLE credentials(host_name text PRIMARY KEY, username text, password text)")
+	db.update("CREATE TABLE config(key text PRIMARY KEY, value text)")
+	from .Config import DEFAULT_CONFIG
+	for k, v in DEFAULT_CONFIG.items():
+		db.update("INSERT INTO config VALUES(?, ?)", k, v)
+	db.update("CREATE TABLE clones(repospec RepoSpec PRIMARY KEY, path Path)");
+	db.update("CREATE TABLE bitbucket_hosts(name text PRIMARY KEY, url text, username text)")
+	db.update("CREATE TABLE daemon_hosts(name text PRIMARY KEY, url text, username text)")
+	db.update("CREATE TABLE locks(key text PRIMARY KEY, pid int, count int)")
+
+	# Import data from the JSON flat files and archive them
+	import json, keyring, shutil, tempfile, zipfile
+	useKeyring = not isinstance(keyring.get_keyring(), keyring.backends.fail.Keyring)
+	archiveSrcs: Iterable[Path] = set()
+	with tempfile.NamedTemporaryFile(delete = False) as f:
+		with zipfile.ZipFile(f, 'w') as zip:
+			p = gotRoot / 'config.json'
+			if p.exists():
+				archiveSrcs.add(p)
+				data = json.loads(p.read_text())
+				for k, v in data.items():
+					db.update("UPDATE config SET value = ? WHERE key = ?", v, k)
+
+			p = gotRoot / 'hosts.json'
+			if p.exists():
+				p2 = gotRoot / 'credentials.json'
+				if not p2.exists():
+					raise RuntimeError("hosts.json without credentials.json")
+				archiveSrcs |= {p, p2}
+				data = json.loads(p.read_text())
+				data2 = json.loads(p2.read_text())
+				for k, v in data.items():
+					try:
+						cred = data2[k]
+						db.update(f"INSERT INTO {v['type']}_hosts VALUES(?, ?, ?)", k, v['url'], cred['username'])
+						if useKeyring:
+							keyring.set_password(k, cred['username'], cred['password'])
+						else:
+							db.update("INSERT INTO credentials VALUES(?, ?, ?)", k, cred['username'], cred['password'])
+					except KeyError:
+						raise RuntimeError(f"Host {k} has no stored credential")
+
+			p = gotRoot / 'clones.json'
+			if p.exists():
+				archiveSrcs.add(p)
+				data = json.loads(p.read_text())
+				for k, v in data.items():
+					db.update("INSERT INTO clones VALUES(?, ?)", k, v)
+
+			for src in archiveSrcs:
+				zip.write(str(src), os.path.basename(src))
+	archivePath = gotRoot / 'old_database.zip'
+	shutil.move(f.name, archivePath)
+	for p in archiveSrcs:
+		p.unlink()
+	if archiveSrcs and verbose(2):
+		print(f"Imported old JSON database. Archived files at {archivePath.resolve()}", file = sys.stderr)
+
+def savepointNameGenerator():
+	i = 1
+	while True:
+		yield f"savepoint_{i}"
+		i += 1
+savepointNameGenerator = savepointNameGenerator()
 
 class DB:
 	def __init__(self, path):
-		self.path = path
-		self.isNew = not path.exists()
-		self.conn = sqlite3.connect(str(path))
+		self.conn = sqlite3.connect(str(path), isolation_level = None)
 		self.conn.row_factory = sqlite3.Row
-		self.conn.isolation_level = None
+		self.schemaUpdates(path)
 
-		if self.isNew:
-			self.update("PRAGMA user_version = 1")
+	def schemaUpdates(self, path):
+		with self.transaction(True):
+			version = startVersion = next(self.select("PRAGMA user_version"))['user_version']
+			for version, updater in enumerate(schemaUpdates[startVersion+1:], startVersion + 1):
+				try:
+					updater(self)
+				except:
+					raise RuntimeError(f"Failed to update database to version {version}")
+			if version == startVersion:
+				return False
+			self.update(f"PRAGMA user_version = {version}")
+			if verbose(2):
+				if startVersion == 0:
+					print("New database created at %s" % path, file = sys.stderr)
+				else:
+					print(f"Database updated to version {version}")
+			return True
 
 	@contextmanager
 	def transaction(self, exclusive = False):
+		savepointName = next(savepointNameGenerator)
 		oldLevel = self.conn.isolation_level # This is almost certainly None, which is auto-commit mode
 		self.conn.isolation_level = 'EXCLUSIVE' if exclusive else '' # Empty string is regular transactional mode
 		try:
-			with self.conn:
-				yield
+			# pysqlite's need to automate certain transaction operations really screws up DDL instructions.
+			# Savepoints seem to avoid the problem
+			# with self.conn:
+			self.conn.execute(f"SAVEPOINT {savepointName}")
+			yield
+			self.conn.execute(f"RELEASE SAVEPOINT {savepointName}")
+		except:
+			self.conn.execute(f"ROLLBACK TO SAVEPOINT {savepointName}")
+			raise
 		finally:
 			self.conn.isolation_level = oldLevel
 
 	@contextmanager
 	def lock(self, key, timeout = None, reentrant = True):
-		self.update("CREATE TABLE IF NOT EXISTS locks(key text primary key, pid int, count int)")
 		pid = os.getpid()
 		tries = 0
 		while True:
@@ -139,23 +224,6 @@ class ActiveRecord:
 	@classmethod
 	def __init_subclass__(cls):
 		super().__init_subclass__()
-		if db.isNew:
-			cls.createTable()
-
-	@classmethod
-	def createTable(cls):
-		pks = cls.pks()
-		argspec = inspect.getfullargspec(cls.__init__)
-
-		cols = []
-		for col in cls.fields():
-			colType = 'text'
-			if col in argspec.annotations:
-				typ = argspec.annotations[col]
-				if typ.__name__ in ActiveRecord.registeredTypes:
-					colType = typ.__name__
-			cols.append(f"{col} {colType}{' PRIMARY KEY' if col in pks else ''}")
-		db.update(f"CREATE TABLE {cls.table()}({', '.join(cols)})")
 
 	@classmethod
 	def table(cls):
@@ -229,18 +297,3 @@ for cls in (Path, PosixPath, WindowsPath):
 	registerType(cls, str, Path)
 
 db = DB(gotRoot / 'db')
-
-### Test
-#TODO Rm
-'''
-class Test(ActiveRecord):
-	def __init__(self, foo, bar, baz):
-		self.foo = foo
-		self.bar = bar
-		self.baz = baz
-
-print(list(Test.loadAll(foo = 'foo')))
-Test('foo', 'bar', 'baz').save()
-Test('foo2', 'bar2', 'baz').save()
-Test('foo3', 'bar', 'baz3').save()
-'''

@@ -20,15 +20,15 @@ def schemaUpdate(f):
 @schemaUpdate
 def v1(db):
 	# First sqlite database. Make all the tables
-	db.update("CREATE TABLE credentials(host_name text PRIMARY KEY, username text, password text)")
-	db.update("CREATE TABLE config(key text PRIMARY KEY, value text)")
+	db.update("CREATE TABLE credentials(host_name text PRIMARY KEY, username text NOT NULL, password text NOT NULL)")
+	db.update("CREATE TABLE config(key text PRIMARY KEY, value text NOT NULL)")
 	from .Config import DEFAULT_CONFIG
 	for k, v in DEFAULT_CONFIG.items():
 		db.update("INSERT INTO config VALUES(?, ?)", k, v)
-	db.update("CREATE TABLE clones(repospec RepoSpec PRIMARY KEY, path Path)");
-	db.update("CREATE TABLE bitbucket_hosts(name text PRIMARY KEY, url text, username text)")
-	db.update("CREATE TABLE daemon_hosts(name text PRIMARY KEY, url text, username text)")
-	db.update("CREATE TABLE locks(key text PRIMARY KEY, pid int, count int)")
+	db.update("CREATE TABLE clones(repospec RepoSpec PRIMARY KEY, path Path NOT NULL)");
+	db.update("CREATE TABLE bitbucket_hosts(name text PRIMARY KEY, url text NOT NULL, username text NOT NULL, ssh_key_path text, clone_url text)")
+	db.update("CREATE TABLE daemon_hosts(name text PRIMARY KEY, url text NOT NULL, username text NOT NULL, ssh_key_path text, clone_url text)")
+	db.update("CREATE TABLE locks(key text PRIMARY KEY, pid int NOT NULL, count int NOT NULL)")
 
 	# Import data from the JSON flat files and archive them
 	import json, keyring, shutil, tempfile, zipfile
@@ -54,7 +54,7 @@ def v1(db):
 				for k, v in data.items():
 					try:
 						cred = data2[k]
-						db.update(f"INSERT INTO {v['type']}_hosts VALUES(?, ?, ?)", k, v['url'], cred['username'])
+						db.update(f"INSERT INTO {v['type']}_hosts VALUES(?, ?, ?, ?, ?)", k, v['url'], cred['username'], None, None)
 						if useKeyring:
 							keyring.set_password(k, cred['username'], cred['password'])
 						else:
@@ -262,7 +262,13 @@ class ActiveRecord:
 		query = 'SELECT * FROM ' + cls.table()
 		if attrs:
 			# Need to construct the clause 'WHERE k1 = ? AND k2 = ? AND k3 = ? ...', and pass (v1, v2, v3, ...) separately
-			placeholders, vals = zip(*((f"{k} = ?", v) for k, v in attrs.items()))
+			placeholders, vals = [], []
+			for k, v in attrs.items():
+				if v is None:
+					placeholders.append(f"{k} is NULL")
+				else:
+					placeholders.append(f"{k} = ?")
+					vals.append(v)
 			query += ' WHERE ' + ' AND '.join(placeholders)
 		else:
 			vals = ()
@@ -281,8 +287,14 @@ class ActiveRecord:
 	def delete(self):
 		cls = self.__class__
 		fields = cls.fields()
-		clauses = [f"{field} = ?" for field in fields]
-		vals = [getattr(self, field) for field in fields]
+		clauses, vals = [], []
+		for field in fields:
+			val = getattr(self, field)
+			if val is None:
+				clauses.append(f"{field} IS NULL")
+			else:
+				clauses.append(f"{field} = ?")
+				vals.append(val)
 		db.update(f"DELETE FROM {cls.table()} WHERE {' AND '.join(clauses)}", *vals)
 
 T = TypeVar('T')

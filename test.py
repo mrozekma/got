@@ -787,6 +787,18 @@ class Tests(TestCase):
 		with GotRun(['project/repo2']) as r:
 			r.assertFails()
 
+	def test_bitbucket_ssh_key(self):
+		if not 'bitbucket' in allHostData:
+			self.skipTest("No bitbucket host available")
+		data = allHostData['bitbucket']
+		if ('sshKey' not in data) or ('sshCloneURL' not in data):
+			self.skipTest("No bitbucket SSH settings available")
+
+		with GotRun(['--add-host', '-t', 'bitbucket', 'test', data['url'], '-u', data['username'], '--ssh-key', data['sshKey'], '--clone-url', data['sshCloneURL']]):
+			pass
+		with GotRun([data['repospecs'][0]]) as r:
+			pass
+
 @contextlib.contextmanager
 def chdir(path):
 	old = Path.cwd()

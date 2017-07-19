@@ -7,7 +7,7 @@ import stashy
 
 from .Credential import Credential
 from .DB import db, ActiveRecord
-from .utils import makeGitEnvironment
+from .utils import makeGitEnvironment, Template
 
 class Host(abc.ABC):
 	subclasses = {}
@@ -49,19 +49,25 @@ class Host(abc.ABC):
 
 # Concrete hosts don't subclass Host because __new__ interferes with their construction
 class SubclassableHost:
-	def __init__(self, name, url, username):
+	def __init__(self, name, url, username, ssh_key_path = None, clone_url = None):
 		self.type = self.getType()
 		self.name = name
 		self.url = url.rstrip('/')
 		self.username = username
+		self.ssh_key_path = ssh_key_path
+		self.clone_url = clone_url
 
 	# This doesn't implement setting the password because it would need to wait until the host's save() method is called. Changing the password should be done via the Credential interface directly
 	@property
 	def password(self):
-		return self.getCredential().password
+		cred = self.getCredential()
+		return cred.password if cred is not None else None
 
 	def getCredential(self):
-		return Credential.load(self.name, self.username)
+		try:
+			return Credential.load(self.name, self.username)
+		except ValueError:
+			return None
 
 	# The necessity of locking hosts is debatable, but the framework is there so I did it
 	@contextmanager
@@ -73,6 +79,12 @@ class SubclassableHost:
 	def __init_subclass__(cls):
 		super().__init_subclass__()
 		Host.subclasses[cls.getType()] = cls
+
+	def getCloneURLFromPattern(self, repoName):
+		return Template(self.clone_url).substitute(
+			username = self.username,
+			rs = repoName,
+		)
 
 	@abc.abstractmethod
 	def getType(self = None):
@@ -86,9 +98,9 @@ class SubclassableHost:
 		pass
 
 class BitbucketHost(SubclassableHost, ActiveRecord):
-	def __init__(self, name, url, username):
+	def __init__(self, name, url, username, ssh_key_path = None, clone_url = None):
 		self._conn = None # Lazy loaded via self.conn property
-		super().__init__(name, url, username)
+		super().__init__(name, url, username, ssh_key_path, clone_url)
 
 	@property
 	def conn(self):
@@ -105,6 +117,10 @@ class BitbucketHost(SubclassableHost, ActiveRecord):
 
 	def check(self):
 		# Test connection
+		if self.password is None:
+			if self.ssh_key_path is None:
+				raise ConnectionError("Either a password or an SSH key is required for Bitbucket access")
+			return
 		try:
 			self.conn.projects.list()
 		except stashy.errors.NotFoundException:
@@ -115,9 +131,14 @@ class BitbucketHost(SubclassableHost, ActiveRecord):
 	def getType(self = None):
 		return 'bitbucket'
 
-	def getCloneURL(self, repoPath):
+	def getCloneURL(self, name):
+		if self.clone_url is not None:
+			return self.getCloneURLFromPattern(name)
+		if self.password is None:
+			raise RuntimeError("Unable to determine Bitbucket clone URL without authentication")
+
 		try:
-			project, repoName = repoPath.split('/')
+			project, repoName = name.split('/')
 		except ValueError:
 			raise ValueError("Expected repository name of the form <project>/<repository>")
 
@@ -140,6 +161,8 @@ class BitbucketHost(SubclassableHost, ActiveRecord):
 		return rtn
 
 	def getReposInProject(self, project):
+		if self.password is None:
+			raise RuntimeError("Unable to access Bitbucket project repository list without authentication")
 		try:
 			return [json['name'] for json in self.conn.projects[project].repos.all()]
 		except stashy.errors.NotFoundException as e:
@@ -148,18 +171,21 @@ class BitbucketHost(SubclassableHost, ActiveRecord):
 			raise ConnectionError("Invalid/insufficient credentials")
 
 class DaemonHost(SubclassableHost, ActiveRecord):
-	def __init__(self, name, url, username):
-		super().__init__(name, url, username)
+	def __init__(self, name, url, username, ssh_key_path = None, clone_url = None):
+		super().__init__(name, url, username, ssh_key_path, clone_url)
 
 	def getType(self = None):
 		return 'daemon'
 
 	def getCloneURL(self, name):
+		if self.clone_url is not None:
+			return self.getCloneURLFromPattern(name)
+
 		# Nothing stops 'name' from escaping the path specified by self.url, like '../../../foo'. I can't see a problem with allowing it other than that it's weird, and allowing normal subdirectory traversal could be useful, so not currently putting any restrictions on 'name'
 		rtn = f"{self.url}/{name}"
 		try:
 			oldEnv = dict(os.environ)
-			os.environ.update(makeGitEnvironment(self.name))
+			os.environ.update(makeGitEnvironment(self))
 			try:
 				git.Git().ls_remote(rtn)
 			finally:

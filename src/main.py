@@ -6,18 +6,17 @@ import os
 from pathlib import Path
 import re
 import shutil
-import string
 import sys
 import time
 
-from .DB import db, gotRoot
+from .DB import db
 from .Credential import Credential
 from .Config import config
 from .Clone import Clone
 from .Host import Host
 
 from .RepoSpec import RepoSpec, HOST_PATTERN
-from .utils import print_return, makeGitEnvironment, verbose
+from .utils import print_return, makeGitEnvironment, verbose, Template
 
 # Type hints
 from typing import *
@@ -42,9 +41,6 @@ parser.add_argument('--unlock', action = DeprecatedAction, help = 'stale locks a
 # --verbose and --quiet are handled by the root script; they're included here so they show up in help output and don't cause argparse errors when present
 parser.add_argument('-v', '--verbose', action = 'count', default = None, help = 'increase the verbosity level')
 parser.add_argument('-q', '--quiet', action = 'store_const', dest = 'verbose', const = 0, help = "don't output verbose information to stderr (clear the verbosity level)")
-
-class Template(string.Template):
-	delimiter = '%'
 
 modeGroup = parser.add_mutually_exclusive_group()
 def makeMode(name: str, handler: Callable, desc: Optional[str], aliases: List[str] = []) -> argparse.ArgumentParser:
@@ -171,7 +167,7 @@ def where(repo: RepoSpec, format: str, on_uncloned: str, ensure_on_disk: bool = 
 		os.makedirs(localPath.parent, exist_ok = True)
 		if verbose(1):
 			print(f"Cloning {url} to {localPath}")
-		git.Repo.clone_from(url, str(localPath), env = makeGitEnvironment(host.name))
+		git.Repo.clone_from(url, str(localPath), env = makeGitEnvironment(host))
 		if repo.revision is not None:
 			r = git.Repo(str(localPath))
 			r.head.reference = r.commit(repo.revision)
@@ -272,8 +268,8 @@ def showHosts(format: str) -> None:
 	elif format == 'json':
 		print(json.dumps({host.name: {'type': host.type, 'url': host.url} for host in Host.loadAll()}))
 
-def addHost(name: str, url: str, type: str, username: str, password: str, force: bool) -> None:
-	host = Host(name, type, url, username)
+def addHost(name: str, url: str, type: str, username: str, password: str, ssh_key: Optional[str], clone_url: Optional[str], force: bool) -> None:
+	host = Host(name, type, url, username, ssh_key, clone_url)
 	with host.lock():
 		existingHost = Host.tryLoad(name = name)
 		if existingHost is not None:
@@ -282,8 +278,9 @@ def addHost(name: str, url: str, type: str, username: str, password: str, force:
 			password = getpass()
 
 		with db.transaction():
-			cred = Credential(name, username, password)
-			cred.save()
+			if password is not None:
+				cred = Credential(name, username, password)
+				cred.save()
 			# Make sure the host is valid
 			try:
 				host.check()
@@ -297,7 +294,7 @@ def addHost(name: str, url: str, type: str, username: str, password: str, force:
 			host.save()
 	print(f"Added {type} host {name} at {url}")
 
-def editHost(name: str, new_url: Optional[str], new_username: Optional[str], new_password: Optional[str], force: bool) -> None:
+def editHost(name: str, new_url: Optional[str], new_username: Optional[str], new_password: Optional[str], new_ssh_key: Optional[str], new_clone_url: Optional[str], force: bool) -> None:
 	host = Host.load(name = name, err = f"No host named {name}")
 	print(f"Editing host: {name}")
 
@@ -309,18 +306,33 @@ def editHost(name: str, new_url: Optional[str], new_username: Optional[str], new
 			if new_url is not None:
 				host.url = new_url
 				print(f"  New URL: {new_url}")
+				#TODO Edit clone URLs
 			if new_username is not None:
 				# The username is stored in both the hosts table and the keyring, so we need to delete the credential and make a new one, but first we need to pull the password out of the keyring so we can put it back with the new username
-				password = host.password
-				host.getCredential().delete()
-				Credential(host.name, new_username, password).save()
+				cred = host.getCredential()
+				if cred is not None:
+					cred.delete()
+					Credential(host.name, new_username, cred.password).save()
 				host.username = new_username
 				print(f"  New username: {new_username}")
 			if new_password is not None:
 				cred = host.getCredential()
-				cred.password = new_password
-				cred.save()
-				print("  New password: ***")
+				if cred is None:
+					if new_password:
+						Credential(host.name, host.username, new_password).save()
+				elif new_password:
+					cred.password = new_password
+					cred.save()
+				else:
+					cred.delete()
+				print(f"  New password: {'***' if new_password else '(none)'}")
+			if new_ssh_key is not None:
+				host.ssh_key_path = new_ssh_key
+				print(f"  New SSH key: {new_ssh_key}")
+			if new_clone_url is not None:
+				host.clone_url = new_clone_url
+				print(f"  New Clone URL: {new_clone_url}")
+				#TODO Edit clone URLs
 
 			try:
 				host.check()
@@ -333,13 +345,17 @@ def editHost(name: str, new_url: Optional[str], new_username: Optional[str], new
 			host.save()
 
 def rmHost(name: str) -> None:
-	host = Host.load(name = name, err = f"No host named {name}")
-	host.delete()
-	print(f"Removed host {name}")
-	ptn = name.replace('\\', '\\\\').replace('%', '\\%') + ':%'
-	with db.cursor("DELETE FROM clones WHERE repospec LIKE ? ESCAPE '\\'", ptn) as cur:
-		num = cur.rowcount
-		print(f"Unregistered {num} {'clone' if num == 1 else 'clones'}")
+	with db.transaction():
+		host = Host.load(name = name, err = f"No host named {name}")
+		cred = host.getCredential()
+		if cred is not None:
+			cred.delete()
+		host.delete()
+		ptn = name.replace('\\', '\\\\').replace('%', '\\%') + ':%'
+		with db.cursor("DELETE FROM clones WHERE repospec LIKE ? ESCAPE '\\'", ptn) as cur:
+			num = cur.rowcount
+			print(f"Removed host {name}")
+			print(f"Unregistered {num} {'clone' if num == 1 else 'clones'}")
 
 #TODO Change 'spec' to an Optional[RepoSpec]
 def iterDeps(spec: Optional[str]) -> Iterable[Clone]:
@@ -410,7 +426,8 @@ def gitPassthrough(directory: Optional[str], ignore_errors: bool, args: List[str
 			print(f"{clone.repospec}: Wrong HEAD in version-pinned repository")
 		else:
 			print(clone.repospec)
-		with repo.git.custom_environment(**makeGitEnvironment(clone.repospec.host)):
+		host = Host.load(name = clone.repospec.host)
+		with repo.git.custom_environment(**makeGitEnvironment(host)):
 			try:
 				if clone.repospec.revision:
 					if pinnedBehavior == 'skip':
@@ -487,8 +504,8 @@ def prune(interactive: bool) -> None:
 				print(f"Removed {clone.repospec} (missing clone {clone.path})")
 	print(f"Removed {removed}, kept {total - removed}")
 
-def getCredential(host: str) -> None:
-	print(Host.load(name = host).password)
+def getCredential(host: str) -> str:
+	return Host.load(name = host).password
 
 def makeLock(key = 'test-lock') -> None:
 	with db.lock(key):
@@ -527,7 +544,9 @@ addHostParser.add_argument('name', type = type_host_name)
 addHostParser.add_argument('url')
 addHostParser.add_argument('-t', '--type', choices = ['bitbucket', 'daemon'], default = 'bitbucket', help = 'git host type')
 addHostParser.add_argument('-u', '--username', default = '', help = 'login username')
-addHostParser.add_argument('-p', '--password', nargs = '?', default = '', const = '-', help = "login password (empty or '-' to prompt)")
+addHostParser.add_argument('-p', '--password', nargs = '?', default = None, const = '-', help = "login password (empty or '-' to prompt)")
+addHostParser.add_argument('-k', '--ssh-key', metavar = 'PEM', help = "ssh public key PEM filename")
+addHostParser.add_argument('--clone-url', metavar = 'URL', help = "clone URL pattern")
 addHostParser.add_argument('--force', action = 'store_true', help = 'add the host even if a connection cannot be established')
 
 editHostParser = makeMode('edit-host', editHost, 'edit a registered git host')
@@ -535,6 +554,8 @@ editHostParser.add_argument('name', type = type_host_name)
 editHostParser.add_argument('--new-url', metavar = 'URL')
 editHostParser.add_argument('--new-username', metavar = 'USERNAME')
 editHostParser.add_argument('--new-password', nargs = '?', const = '-', metavar = 'PASSWORD')
+editHostParser.add_argument('--new-ssh-key', metavar = 'PEM')
+editHostParser.add_argument('--new-clone-url', metavar = 'URL')
 editHostParser.add_argument('--force', action = 'store_true')
 
 rmHostParser = makeMode('rm-host', rmHost, 'remove a registered git host')
@@ -564,7 +585,7 @@ pruneParser = makeMode('prune', prune, 'unregister clones that no longer exist o
 pruneParser.add_argument('-i', '--interactive', action = 'store_true', help = 'prompt before unregistering missing clones')
 
 # This is used by git-credential, it's not meant for direct user interaction
-getCredentialParser = makeMode('get-credential', getCredential, argparse.SUPPRESS)
+getCredentialParser = makeMode('get-credential', print_return(getCredential, 'host has no stored password'), argparse.SUPPRESS)
 getCredentialParser.add_argument('host')
 
 # This is just for testing

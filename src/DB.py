@@ -86,7 +86,8 @@ def savepointNameGenerator():
 savepointNameGenerator = savepointNameGenerator()
 
 class DB:
-	def __init__(self, path):
+	def __init__(self, path: Path):
+		os.makedirs(path.parent, exist_ok = True)
 		self.conn = sqlite3.connect(str(path), isolation_level = None)
 		self.conn.row_factory = sqlite3.Row
 		self.schemaUpdates(path)

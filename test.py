@@ -799,6 +799,18 @@ class Tests(TestCase):
 		with GotRun([data['repospecs'][0]]) as r:
 			pass
 
+	def test_non_existent_got_root(self): #38
+		gotRoot = Path('new_directory')
+		self.assertFalse(gotRoot.exists())
+		args = [str(gotDir / 'got')]
+		if platform.system() == 'Windows':
+			args[0] += '.bat'
+		env = os.environ.copy()
+		env['GOT_ROOT'] = str(gotRoot)
+		with subprocess.Popen(args, env = env) as p:
+			self.assertEqual(0, p.wait())
+		self.assertTrue(gotRoot.exists())
+
 @contextlib.contextmanager
 def chdir(path):
 	old = Path.cwd()

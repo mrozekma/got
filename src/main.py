@@ -294,7 +294,7 @@ def addHost(name: str, url: str, type: str, username: str, password: str, ssh_ke
 			host.save()
 	print(f"Added {type} host {name} at {url}")
 
-def editHost(name: str, new_url: Optional[str], new_username: Optional[str], new_password: Optional[str], new_ssh_key: Optional[str], new_clone_url: Optional[str], force: bool) -> None:
+def editHost(name: str, new_url: Optional[str], new_username: Optional[str], new_password: Optional[str], new_ssh_key: Optional[str], new_clone_url: Optional[str], update_clones: bool, force: bool) -> None:
 	host = Host.load(name = name, err = f"No host named {name}")
 	print(f"Editing host: {name}")
 
@@ -306,7 +306,6 @@ def editHost(name: str, new_url: Optional[str], new_username: Optional[str], new
 			if new_url is not None:
 				host.url = new_url
 				print(f"  New URL: {new_url}")
-				#TODO Edit clone URLs
 			if new_username is not None:
 				# The username is stored in both the hosts table and the keyring, so we need to delete the credential and make a new one, but first we need to pull the password out of the keyring so we can put it back with the new username
 				cred = host.getCredential()
@@ -332,7 +331,6 @@ def editHost(name: str, new_url: Optional[str], new_username: Optional[str], new
 			if new_clone_url is not None:
 				host.clone_url = new_clone_url
 				print(f"  New Clone URL: {new_clone_url}")
-				#TODO Edit clone URLs
 
 			try:
 				host.check()
@@ -342,6 +340,20 @@ def editHost(name: str, new_url: Optional[str], new_username: Optional[str], new
 				else:
 					raise ConnectionError(f"Unable to edit host: {e}")
 
+			if update_clones and ((new_url is not None) or (new_clone_url is not None)):
+				count = 0
+				print("Updating clones:")
+				for clone in Clone.loadAll(repospec = Like(f"{name}:%")):
+					try:
+						r = git.Repo(str(clone.path))
+					except git.exc.NoSuchPathError:
+						print(f"  {clone.repospec}: local clone not found")
+						continue
+					url = host.getCloneURL(clone.repospec.str(False, False))
+					r.remotes['origin'].set_url(url)
+					print(f"  {clone.repospec}: {url}")
+					count += 1
+				print(f"Updated {count} clone remote {'URL' if count == 1 else 'URLs'}")
 			host.save()
 
 def rmHost(name: str) -> None:
@@ -554,6 +566,7 @@ editHostParser.add_argument('--new-username', metavar = 'USERNAME')
 editHostParser.add_argument('--new-password', nargs = '?', const = '-', metavar = 'PASSWORD')
 editHostParser.add_argument('--new-ssh-key', metavar = 'PEM')
 editHostParser.add_argument('--new-clone-url', metavar = 'URL')
+editHostParser.add_argument('--update-clones', action = 'store_true')
 editHostParser.add_argument('--force', action = 'store_true')
 
 rmHostParser = makeMode('rm-host', rmHost, 'remove a registered git host')

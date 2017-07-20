@@ -2,3 +2,4 @@ gitpython # git
 keyring
 psutil
 stashy
+wincertstore; sys_platform == 'win32'

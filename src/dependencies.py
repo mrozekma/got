@@ -8,11 +8,13 @@ import re
 import sys
 
 requirementsPath = Path(__file__).parent.parent / 'requirements.txt'
-pattern = re.compile('^([a-zA-Z0-9]+).*?(?: # ([a-zA-Z0-9]+))?$')
+pattern = re.compile('^([a-zA-Z0-9]+).*?(?:; sys_platform == \'([^\']+)\')?.*?(?: # ([a-zA-Z0-9]+))?$')
 for line in requirementsPath.read_text().split('\n'):
 	match = pattern.match(line)
 	if match:
-		project, package = match.groups()
+		project, sys_platform, package = match.groups()
+		if sys_platform is not None and sys.platform != sys_platform:
+			continue
 		try:
 			import_module(package or project)
 		except ImportError:

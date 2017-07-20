@@ -4,6 +4,7 @@ import git
 import json
 import os
 from pathlib import Path
+import platform
 import re
 import shutil
 import sys
@@ -22,6 +23,14 @@ from .utils import print_return, makeGitEnvironment, verbose, Template
 from typing import *
 URL = NewType('URL', str)
 JSON = NewType('JSON', str)
+
+# On Windows, use the system certificates instead of the bundled ones
+if platform.system() == 'Windows' and 'REQUESTS_CA_BUNDLE' not in os.environ:
+	import wincertstore
+	ca = wincertstore.CertFile()
+	ca.addstore('ROOT')
+	ca.addstore('CA')
+	os.environ['REQUESTS_CA_BUNDLE'] = ca.name
 
 class DeprecatedAction(argparse.Action):
 	def __init__(self, option_strings, dest, why = None, **kw):

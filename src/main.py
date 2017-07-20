@@ -9,7 +9,7 @@ import shutil
 import sys
 import time
 
-from .DB import db
+from .DB import db, Like
 from .Credential import Credential
 from .Config import config
 from .Clone import Clone
@@ -351,11 +351,9 @@ def rmHost(name: str) -> None:
 		if cred is not None:
 			cred.delete()
 		host.delete()
-		ptn = name.replace('\\', '\\\\').replace('%', '\\%') + ':%'
-		with db.cursor("DELETE FROM clones WHERE repospec LIKE ? ESCAPE '\\'", ptn) as cur:
-			num = cur.rowcount
-			print(f"Removed host {name}")
-			print(f"Unregistered {num} {'clone' if num == 1 else 'clones'}")
+		num = Clone.deleteAll(repospec = Like(name.replace('\\', '\\\\').replace('%', '\\%') + ':%'))
+		print(f"Removed host {name}")
+		print(f"Unregistered {num} {'clone' if num == 1 else 'clones'}")
 
 #TODO Change 'spec' to an Optional[RepoSpec]
 def iterDeps(spec: Optional[str]) -> Iterable[Clone]:

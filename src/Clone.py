@@ -1,4 +1,4 @@
-from .DB import ActiveRecord, db
+from .DB import ActiveRecord, Like, db
 from .RepoSpec import RepoSpec
 
 from pathlib import Path
@@ -13,8 +13,6 @@ class Clone(ActiveRecord):
 	def loadSpec(cls, repospec: RepoSpec):
 		if repospec.host is None:
 			ptn = '%:' + str(repospec).replace('\\', '\\\\').replace('%', '\\%')
-			rows = db.select(f"SELECT * FROM {cls.table()} WHERE repospec LIKE ? ESCAPE '\\'", ptn)
+			yield from Clone.loadAll(repospec = Like(ptn))
 		else:
-			rows = db.select(f"SELECT * FROM {cls.table()} WHERE repospec = ?", repospec)
-		for row in rows:
-			yield Clone(**row)
+			yield from Clone.loadAll(repospec = repospec)

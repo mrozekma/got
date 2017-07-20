@@ -218,6 +218,10 @@ class DB:
 		with self.cursor(expr, *args):
 			pass
 
+class Like:
+	def __init__(self, v):
+		self.v = v
+
 class ActiveRecord:
 	registeredTypes = set()
 
@@ -257,25 +261,40 @@ class ActiveRecord:
 		except ValueError:
 			return None
 
+	@staticmethod
+	def makeClause(attrs):
+		if not attrs:
+			return '', []
+
+		# Need to construct the clause 'WHERE k1 = ? AND k2 = ? AND k3 = ? ...', and return it along with (v1, v2, v3, ...)
+		placeholders, vals, hasPatterns = [], [], False
+		for k, v in attrs.items():
+			if v is None:
+				placeholders.append(f"{k} is NULL")
+			elif isinstance(v, Like):
+				placeholders.append(f"{k} LIKE ?")
+				vals.append(v.v)
+				hasPatterns = True
+			else:
+				placeholders.append(f"{k} = ?")
+				vals.append(v)
+		return ' WHERE ' + ' AND '.join(placeholders) + (" ESCAPE '\\'" if hasPatterns else ''), vals
+
 	@classmethod
 	def loadAll(cls, *, sort = None, **attrs):
-		query = 'SELECT * FROM ' + cls.table()
-		if attrs:
-			# Need to construct the clause 'WHERE k1 = ? AND k2 = ? AND k3 = ? ...', and pass (v1, v2, v3, ...) separately
-			placeholders, vals = [], []
-			for k, v in attrs.items():
-				if v is None:
-					placeholders.append(f"{k} is NULL")
-				else:
-					placeholders.append(f"{k} = ?")
-					vals.append(v)
-			query += ' WHERE ' + ' AND '.join(placeholders)
-		else:
-			vals = ()
+		clause, vals = ActiveRecord.makeClause(attrs)
+		query = 'SELECT * FROM ' + cls.table() + clause
 		if sort is not None:
 			query += ' ORDER BY ' + sort
 		for row in db.select(query, *vals):
 			yield cls(**row)
+
+	@classmethod
+	def deleteAll(cls, **attrs):
+		clause, vals = ActiveRecord.makeClause(attrs)
+		expr = 'DELETE FROM ' + cls.table() + clause
+		with db.cursor(expr, *vals) as cur:
+			return cur.rowcount
 
 	def save(self):
 		cls = self.__class__

@@ -58,8 +58,8 @@ class GotRun:
 	def stdout(self) -> str:
 		if self._stdout is None:
 			stdout, stderr = self.proc.communicate()
-			self._stdout = stdout.decode('ascii')
-			self._stderr = stderr.decode('ascii')
+			self._stdout = stdout.decode('utf-8')
+			self._stderr = stderr.decode('utf-8')
 
 			# For some reason on Windows, stdout has an extra newline, and a couple of the tests are sensitive to it
 			if platform.system() == 'Windows' and self._stdout.endswith('\r\n'):

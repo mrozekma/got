@@ -319,7 +319,9 @@ Argument                  Type       Description
 ``url``                   Mandatory  Root URL of the host
 ``--type TYPE``           Optional   Host type; see the :ref:`list of host types <host_types>` for more info. Defaults to ``bitbucket``
 ``--username USERNAME``   Optional   Account username. Optional if no authentication is required
-``--password [PASSWORD]`` Optional   Account password. Optional if no authentication is required. Use ``--password`` with no password to be prompted for one on stdin
+``--password [PASSWORD]`` Optional   Account password. Optional if no authentication is required or you're using an SSH key. Use ``--password`` with no password to be prompted for one on stdin
+``--ssh-key PEM_FILE``    Optional   Path to SSH private key. Optional if no authentication is required or you're using a password
+``--clone-url URL``       Optional   Pattern to use to figure out a clone URL for a given repospec
 ``--force``               Optional   Add the host even if unable to connect to it
 ========================= ========== ======================================================
 
@@ -327,18 +329,41 @@ Argument                  Type       Description
 
    $ got --add-host my-bitbucket http://localhost:7990/ -u user -p
    Password: 
+   Added bitbucket host bitbucket at http://localhost:7990/
    $ got --hosts
    Name                           Type                 URL
    my-bitbucket                   bitbucket            http://localhost:7990/
+
+There are multiple authentication options depending on the host configuration:
+
+* If the host doesn't require authentication, all of the authentication options can be omitted.
+* If the host requires a username and password, use ``--username`` and ``--password``.
+* If the host requires an SSH key, use ``--ssh-key``.
+
+  * In the case of Bitbucket hosts, the SSH key doesn't provide API access, so features requiring the API will be disabled. This includes host validation (making sure you have access to the host at creation time) and glob repospecs (e.g. `project/*`). If you provide both a username/password and an SSH key, the SSH key will be used for cloning but the password will be used for API access.
+
+Both host types will automatically determine the clone URL given the host's base URL and the desired repospec. Bitbucket hosts use the API to request the clone URL, while daemon hosts simply concatenate the base URL and the repospec. If this is not the correct scheme to follow, or if you have a Bitbucket host with no API access because you're using SSH keys, you can specify the clone URL scheme using ``--clone-url``. This is a format string that accepts the following placeholders:
+
+============= ==========================================
+Placeholder   Description
+============= ==========================================
+``%rs``       The requested repospec
+``%username`` The username associated with the host
+============= ==========================================
+
+::
+
+   $ got --add-host bitbucket http://localhost:7990/ --ssh-key ~/.ssh/id_rsa --clone-url 'ssh://git@localhost:7999/%rs.git'
+   Added bitbucket host bitbucket at http://localhost:7990/
 
 .. _edit-host:
 
 Edit host
 ~~~~~~~~~
 
-Edit an existing host with ``--edit-host``. The arguments are similar to :ref:`--add-host <add-host>`; ``name`` is mandatory to specify the host, and ``--force`` optionally forces the edit even if unable to connect, just as when adding a host. ``--new-url``, ``--new-username``, and ``--new-password`` all modify the corresponding fields.
+Edit an existing host with ``--edit-host``. The arguments are similar to :ref:`--add-host <add-host>`; ``name`` is mandatory to specify the host, and ``--force`` optionally forces the edit even if unable to connect, just as when adding a host. ``--new-url``, ``--new-username``, ``--new-password``, ``--new-ssh-key``, and ``--new-clone-url`` all modify the corresponding fields.
 
-Note that when changing the URL, any existing clones from that host are left unchanged, so their remote URLs aren't updated.
+The options ``--new-url`` and ``--new-clone-url`` require special care because they can change what URL clones expect to originate from. If you have existing clones from this host that need to be updated, use ``--update-clones`` to recompute their origin URLs and update the repository remotes.
 
 .. _rm-host:
 

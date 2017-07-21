@@ -151,14 +151,13 @@ class BitbucketHost(SubclassableHost, ActiveRecord):
 
 		if data['scmId'] != 'git':
 			raise RuntimeError("{repoPath} is not a git repository ({data['scmId']})")
-		# Not sure if one protocol should be favored over another. Going with HTTP at the moment if available, otherwise taking the first URL listed
-		rtn = None
-		for clone in data['links']['clone']:
-			if rtn is None or clone['name'] == 'http':
-				rtn = clone['href']
-		if rtn is None:
-			raise ValueError("No clone links found")
-		return rtn
+		urls = {clone['name']: clone['href'] for clone in data['links']['clone']}
+		if self.ssh_key_path is not None and 'ssh' in urls:
+			return urls['ssh']
+		elif self.password is not None and 'http' in urls:
+			return urls['http']
+		else:
+			raise ValueError("No compatible clone links found")
 
 	def getReposInProject(self, project):
 		if self.password is None:

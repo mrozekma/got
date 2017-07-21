@@ -349,7 +349,7 @@ def editHost(name: str, new_url: Optional[str], new_username: Optional[str], new
 				else:
 					raise ConnectionError(f"Unable to edit host: {e}")
 
-			if update_clones and ((new_url is not None) or (new_clone_url is not None)):
+			if update_clones and ((new_url is not None) or (new_ssh_key is not None) or (new_clone_url is not None)):
 				count = 0
 				print("Updating clones:")
 				for clone in Clone.loadAll(repospec = Like(f"{name}:%")):

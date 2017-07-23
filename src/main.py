@@ -127,7 +127,9 @@ def where(repo: RepoSpec, format: str, on_uncloned: str, ensure_on_disk: bool = 
 		elif format == 'json':
 			return json.dumps({'repospec': str(clone.repospec), 'path': str(clone.path)})
 
-	def lookupRepo():
+	def lookupRepo(pnt = None):
+		if pnt is None:
+			pnt = verbose(1)
 		# Ambiguous repospecs are a problem. If 'repo' lacks a host, and we can find exactly one matching clone, we use it
 		candidates = list(Clone.loadSpec(repo))
 		if len(candidates) == 1:
@@ -135,11 +137,11 @@ def where(repo: RepoSpec, format: str, on_uncloned: str, ensure_on_disk: bool = 
 			# Make sure the local path actually exists
 			if not ensure_on_disk or clone.path.is_dir():
 				return formatRtn(clone)
-			elif verbose(1):
+			elif pnt:
 				print(f"{repo}: local clone `{clone.path}' no longer exists")
 		elif len(candidates) > 1:
 			raise RuntimeError(f"{repo}: Ambiguous repospec matches multiple clones: {', '.join(clone.repospec for clone in candidates)}")
-		elif verbose(1):
+		elif pnt:
 			print(f"{repo}: no local clone on record")
 
 	rtn = lookupRepo()
@@ -162,7 +164,7 @@ def where(repo: RepoSpec, format: str, on_uncloned: str, ensure_on_disk: bool = 
 
 	with repo.lock():
 		# We intentionally delay locking until after confirming the repo doesn't exist, but now that we're in the critical section we need to check again
-		rtn = lookupRepo()
+		rtn = lookupRepo(False)
 		if rtn is not None:
 			return rtn
 
@@ -339,7 +341,7 @@ def editHost(name: str, new_url: Optional[str], new_username: Optional[str], new
 				print(f"  New SSH key: {new_ssh_key}")
 			if new_clone_url is not None:
 				host.clone_url = new_clone_url
-				print(f"  New Clone URL: {new_clone_url}")
+				print(f"  New clone URL: {new_clone_url}")
 
 			try:
 				host.check()

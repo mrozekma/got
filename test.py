@@ -12,6 +12,7 @@ from pathlib import Path
 import platform
 import re
 import shutil
+import string
 import subprocess
 import sys
 import tempfile
@@ -23,6 +24,9 @@ import zipfile
 class JUnitRunner(TextTestRunner):
 	def __init__(self):
 		super().__init__(resultclass = lambda stream, *rest: junitxml.JUnitXmlResult(stream))
+
+class Template(string.Template):
+	delimiter = '%'
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--testrundir', '-d')
@@ -137,8 +141,20 @@ class GotRun:
 			self.fail("Wrong stderr; didn't match pattern")
 
 class Tests(TestCase):
-	def addHost(self, type, name, url, username, password, *, force = False, shouldWork = True):
-		with GotRun(['--add-host', '-t', type, name, url, '-u', username, '-p', password, '--force' if force else '']) as r:
+	def addHost(self, type, name, url, username = None, password = None, sshKey = None, cloneUrl = None, force = False, shouldWork = True):
+		args = ['--add-host', '-t', type, name, url]
+		if username:
+			args += ['-u', username]
+		if password:
+			args += ['-p', password]
+		if sshKey:
+			args += ['-k', sshKey]
+		if cloneUrl:
+			args += ['--clone-url', cloneUrl]
+		if force:
+			args.append('--force')
+
+		with GotRun(args) as r:
 			if not shouldWork:
 				r.assertFails()
 
@@ -146,7 +162,9 @@ class Tests(TestCase):
 		if not 'bitbucket' in allHostData:
 			self.skipTest("No bitbucket host available")
 		data = allHostData['bitbucket']
-		self.addHost('bitbucket', name, data['url'], data['username'], data['password'], force = force)
+		if not (('username' in data and 'password' in data) or ('sshKey' in data and 'cloneUrl' in data)):
+			self.skipTest("Bitbucket host doesn't have auth data")
+		self.addHost('bitbucket', name, force = force, **{k: v for k, v in data.items() if k in ('url', 'username', 'password', 'sshKey', 'cloneUrl')})
 		return data
 
 	def assertRepoOriginatesFrom(self, repoPath, originUrl):
@@ -224,11 +242,15 @@ class Tests(TestCase):
 
 	def test_host_bad_credentials(self):
 		hostData = self.addBitbucketHost()
+		if not ('username' in hostData and 'password' in hostData):
+			self.skipTest("No username/password auth data")
 		# Using a bad password for a valid username risks triggering a captcha check
 		self.addHost('bitbucket', 'host', hostData['url'], hostData['username'] + '_neg_test', 'pw', shouldWork = False)
 
 	def test_host_force(self):
 		hostData = self.addBitbucketHost()
+		if not ('username' in hostData and 'password' in hostData):
+			self.skipTest("No username/password auth data")
 		self.addHost('bitbucket', 'host1', 'http://example.com', 'username', 'password', force = True)
 		self.addHost('bitbucket', 'host2', hostData['url'], hostData['username'] + '_neg_test', 'pw', force = True)
 
@@ -239,11 +261,13 @@ class Tests(TestCase):
 
 	def test_edit_host_new_username(self):
 		hostData = self.addBitbucketHost('bitbucket')
-		with GotRun(['--edit-host', 'bitbucket', '--new-username', hostData['username'] + '_test', '--force']) as r:
-			r.assertInStdout(f"New username: {hostData['username'] + '_test'}")
+		with GotRun(['--edit-host', 'bitbucket', '--new-username', hostData.get('username', 'username') + '_test', '--force']) as r:
+			r.assertInStdout(f"New username: {hostData.get('username', 'username') + '_test'}")
 
 	def test_edit_host_new_password(self):
 		hostData = self.addBitbucketHost('bitbucket')
+		if not ('username' in hostData and 'password' in hostData):
+			self.skipTest("No username/password auth data")
 		# Also changing username to avoid captcha problems
 		# I'm assuming the current password is not 'pw'. Hopefully
 		with GotRun(['--edit-host', 'bitbucket', '--new-username', hostData['username'] + '_test', '--new-password', 'pw', '--force']) as r:
@@ -287,7 +311,7 @@ class Tests(TestCase):
 				clonePath = Path.cwd() / 'repos' / 'bitbucket' / repospec
 				self.assertEqual(reportedClonePath, str(clonePath))
 				self.assertTrue(clonePath.exists(), f"{repospec} clone not found at {clonePath}")
-				self.assertRepoOriginatesFrom(clonePath, hostData['cloneURL'] % repospec)
+				self.assertRepoOriginatesFrom(clonePath, Template(hostData['cloneUrl']).substitute(rs = repospec))
 
 	def test_where_one_plain(self):
 		for repospec, r in self.whereHelper(1, 'plain'):
@@ -382,13 +406,15 @@ class Tests(TestCase):
 		project = hostData['repospecs'][0].split('/')[0]
 		with GotRun([f"{project}/fake_repo_that_hopefully_does_not_exist"]) as r:
 			r.assertFails()
-			r.assertInStderr(f"bitbucket: Repository {project}/fake_repo_that_hopefully_does_not_exist does not exist")
+			if 'cloneUrl' not in hostData:
+				r.assertInStderr(f"bitbucket: Repository {project}/fake_repo_that_hopefully_does_not_exist does not exist")
 
 	def test_where_fake_bitbucket_project(self):
 		hostData = self.addBitbucketHost('bitbucket')
 		with GotRun([f"fake_project_that_hopefully_does_not_exist/foo"]) as r:
 			r.assertFails()
-			r.assertInStderr("bitbucket: Project fake_project_that_hopefully_does_not_exist does not exist")
+			if 'cloneUrl' not in hostData:
+				r.assertInStderr("bitbucket: Project fake_project_that_hopefully_does_not_exist does not exist")
 
 	def test_where_invalid_bitbucket_repospec(self):
 		hostData = self.addBitbucketHost('bitbucket')
@@ -476,8 +502,8 @@ class Tests(TestCase):
 		hostData = self.addBitbucketHost('bitbucket')
 		repospec = hostData['repospecs'][0]
 		with GotRun(['--whence', repospec]) as r:
-			cloneURL = r.stdout.strip()
-			self.assertEqual(cloneURL, hostData['cloneURL'] % repospec)
+			cloneUrl = r.stdout.strip()
+			self.assertEqual(cloneUrl, Template(hostData['cloneUrl']).substitute(rs = repospec))
 
 	def test_whence_json(self):
 		hostData = self.addBitbucketHost('bitbucket')
@@ -487,11 +513,13 @@ class Tests(TestCase):
 			self.assertEqual(json, {
 				'repospec': repospec,
 				'host': 'bitbucket',
-				'url': hostData['cloneURL'] % repospec,
+				'url': Template(hostData['cloneUrl']).substitute(rs = repospec),
 			})
 
 	def test_whence_bad(self):
 		hostData = self.addBitbucketHost('bitbucket')
+		if 'cloneUrl' in hostData:
+			self.skipTest("Using hardcoded clone URL")
 		with GotRun(['--whence', 'bad_project/bad_repospec']) as r:
 			r.assertFails()
 		with GotRun(['--whence', 'bad_project/bad_repospec', '--format=json']) as r:
@@ -786,18 +814,6 @@ class Tests(TestCase):
 			r.assertStdoutMatches('repo2')
 		with GotRun(['project/repo2']) as r:
 			r.assertFails()
-
-	def test_bitbucket_ssh_key(self):
-		if not 'bitbucket' in allHostData:
-			self.skipTest("No bitbucket host available")
-		data = allHostData['bitbucket']
-		if ('sshKey' not in data) or ('sshCloneURL' not in data):
-			self.skipTest("No bitbucket SSH settings available")
-
-		with GotRun(['--add-host', '-t', 'bitbucket', 'test', data['url'], '-u', data['username'], '--ssh-key', data['sshKey'], '--clone-url', data['sshCloneURL']]):
-			pass
-		with GotRun([data['repospecs'][0]]) as r:
-			pass
 
 	def test_non_existent_got_root(self): #38
 		gotRoot = Path('new_directory')

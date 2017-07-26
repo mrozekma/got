@@ -132,15 +132,15 @@ class BitbucketHost(SubclassableHost, ActiveRecord):
 		return 'bitbucket'
 
 	def getCloneURL(self, name):
-		if self.clone_url is not None:
-			return self.getCloneURLFromPattern(name)
-		if self.password is None:
-			raise RuntimeError("Unable to determine Bitbucket clone URL without authentication")
-
 		try:
 			project, repoName = name.split('/')
 		except ValueError:
 			raise ValueError("Expected repository name of the form <project>/<repository>")
+
+		if self.clone_url is not None:
+			return self.getCloneURLFromPattern(name)
+		if self.password is None:
+			raise RuntimeError("Unable to determine Bitbucket clone URL without authentication")
 
 		try:
 			data = self.conn.projects[project].repos[repoName].get()

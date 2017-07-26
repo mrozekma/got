@@ -5,8 +5,8 @@ import fnmatch
 import git
 import inspect
 from json import loads as fromJS, dumps as toJS
-import junitxml
 import keyring
+from lxml import etree
 import os
 from pathlib import Path
 import platform
@@ -16,14 +16,11 @@ import string
 import subprocess
 import sys
 import tempfile
+import textwrap
+import traceback
 from typing import *
-from unittest import main, TestCase, TextTestRunner
+from unittest import main, TestCase, TestResult, TextTestRunner
 import zipfile
-
-#TODO Write XML to a file, embed stdout/stderr in the results
-class JUnitRunner(TextTestRunner):
-	def __init__(self):
-		super().__init__(resultclass = lambda stream, *rest: junitxml.JUnitXmlResult(stream))
 
 class Template(string.Template):
 	delimiter = '%'
@@ -31,7 +28,7 @@ class Template(string.Template):
 parser = argparse.ArgumentParser()
 parser.add_argument('--testrundir', '-d')
 parser.add_argument('--host-data')
-parser.add_argument('--junit', action = 'store_const', dest = 'runner', const = JUnitRunner, default = TextTestRunner)
+parser.add_argument('--junit', action = 'store_true')
 parser.add_argument('--verbose', '-v', action = 'store_true')
 parser.add_argument('--list', action = 'store_true', help = 'list test cases instead of running them')
 parser.add_argument('tests', nargs = '*')
@@ -99,9 +96,9 @@ class GotRun:
 
 	def __exit__(self, type, value, tb):
 		if args.verbose:
-			if self.stdout:
+			if self.stdout and not args.junit:
 				print(colorama.Fore.CYAN + self.stdout + colorama.Fore.RESET)
-			if self.stderr:
+			if self.stderr and not args.junit:
 				print(colorama.Fore.RED + self.stderr + colorama.Fore.RESET)
 		try:
 			if not self.checkedExit:
@@ -857,10 +854,11 @@ for n in dir(Tests):
 			print(n[5:])
 			continue
 		def closure(name, testFn):
-			def f(*args, **kw):
+			def f(*fnArgs, **kw):
 				print()
 				print()
-				print(colorama.Fore.BLACK + colorama.Back.WHITE + colorama.Style.BRIGHT + ("%-80s" % name) + colorama.Style.RESET_ALL)
+				if not args.junit:
+					print(colorama.Fore.BLACK + colorama.Back.WHITE + colorama.Style.BRIGHT + ("%-80s" % name) + colorama.Style.RESET_ALL)
 				path = runDir / name
 				try:
 					shutil.rmtree(path)
@@ -868,12 +866,56 @@ for n in dir(Tests):
 					pass
 				os.makedirs(path)
 				with chdir(path):
-					return testFn(*args, **kw)
+					return testFn(*fnArgs, **kw)
 			return f
 		setattr(Tests, n, closure(n[5:], getattr(Tests, n)))
 
 if args.list:
 	exit(0)
 
-colorama.init()
-main(argv = sys.argv[:1] + extraArgs, testRunner = args.runner)
+# This unfortunately relies on a decent amount of introspection into TestResult, so it might break with new versions of unittest
+class GotTestResult(TestResult):
+	def __init__(self, *args, **kw):
+		super().__init__(*args, **kw)
+		self.junit = etree.Element('testsuite')
+
+	def startTest(self, test):
+		super().startTest(test)
+		self._mirrorOutput = True
+		suite, case = test.id().rsplit('.', 1)
+		self.junit.append(etree.Element('testcase', classname = suite, name = case))
+
+	def stopTest(self, test):
+		if self._stdout_buffer is not None:
+			tag = etree.Element('system-out')
+			tag.text = self._stdout_buffer.getvalue()
+			self.junit[-1].append(tag)
+		if self._stderr_buffer is not None:
+			tag = etree.Element('system-err')
+			tag.text = self._stderr_buffer.getvalue()
+			self.junit[-1].append(tag)
+		super().stopTest(test)
+
+	def formatErr(self, err):
+		return {'type': str(err[0]), 'message': textwrap.dedent(''.join(traceback.format_tb(err[2])))}
+
+	def addError(self, test, err):
+		self.junit[-1].append(etree.Element('error', **self.formatErr(err)))
+
+	def addFailure(self, test, err):
+		self.junit[-1].append(etree.Element('failure', **self.formatErr(err)))
+
+	def addSkip(self, test, reason):
+		# Looks like Jenkins doesn't support skip messages
+		self.junit[-1].append(etree.Element('skipped'))
+
+	def stopTestRun(self):
+		(runDir / 'junit.xml').write_text(etree.tostring(self.junit).decode('utf-8'))
+
+if not args.junit:
+	colorama.init()
+try:
+	main(argv = sys.argv[:1] + extraArgs, testRunner = TextTestRunner(resultclass = GotTestResult, buffer = True) if args.junit else TextTestRunner)
+finally:
+	sys.stdout = sys.__stdout__
+	sys.stderr = sys.__stderr__

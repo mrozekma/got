@@ -2,4 +2,3 @@
 colorama
 gitpython # git
 junitxml
-lxml

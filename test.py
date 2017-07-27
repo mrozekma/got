@@ -6,7 +6,6 @@ import git
 import inspect
 from json import loads as fromJS, dumps as toJS
 import keyring
-from lxml import etree
 import os
 from pathlib import Path
 import platform
@@ -20,6 +19,7 @@ import textwrap
 import traceback
 from typing import *
 from unittest import main, TestCase, TestResult, TextTestRunner
+from xml.etree import cElementTree as ET
 import zipfile
 
 class Template(string.Template):
@@ -877,40 +877,36 @@ if args.list:
 class GotTestResult(TestResult):
 	def __init__(self, *args, **kw):
 		super().__init__(*args, **kw)
-		self.junit = etree.Element('testsuite')
+		self.junitRoot = ET.Element('testsuite')
 
 	def startTest(self, test):
 		super().startTest(test)
 		self._mirrorOutput = True
 		suite, case = test.id().rsplit('.', 1)
-		self.junit.append(etree.Element('testcase', classname = suite, name = case))
+		self.junitCase = ET.SubElement(self.junitRoot, 'testcase', classname = suite, name = case)
 
 	def stopTest(self, test):
 		if self._stdout_buffer is not None:
-			tag = etree.Element('system-out')
-			tag.text = self._stdout_buffer.getvalue()
-			self.junit[-1].append(tag)
+			ET.SubElement(self.junitCase, 'system-out').text = self._stdout_buffer.getvalue()
 		if self._stderr_buffer is not None:
-			tag = etree.Element('system-err')
-			tag.text = self._stderr_buffer.getvalue()
-			self.junit[-1].append(tag)
+			ET.SubElement(self.junitCase, 'system-err').text = self._stderr_buffer.getvalue()
 		super().stopTest(test)
 
 	def formatErr(self, err):
 		return {'type': str(err[0]), 'message': textwrap.dedent(''.join(traceback.format_tb(err[2])))}
 
 	def addError(self, test, err):
-		self.junit[-1].append(etree.Element('error', **self.formatErr(err)))
+		ET.SubElement(self.junitCase, 'error', **self.formatErr(err))
 
 	def addFailure(self, test, err):
-		self.junit[-1].append(etree.Element('failure', **self.formatErr(err)))
+		ET.SubElement(self.junitCase, 'failure', **self.formatErr(err))
 
 	def addSkip(self, test, reason):
 		# Looks like Jenkins doesn't support skip messages
-		self.junit[-1].append(etree.Element('skipped'))
+		ET.SubElement(self.junitCase, 'skipped')
 
 	def stopTestRun(self):
-		(runDir / 'junit.xml').write_text(etree.tostring(self.junit).decode('utf-8'))
+		ET.ElementTree(self.junitRoot).write(str(runDir / 'junit.xml'))
 
 if not args.junit:
 	colorama.init()

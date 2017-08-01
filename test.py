@@ -955,6 +955,8 @@ class GotTestResult(TestResult):
 		super().startTest(test)
 		self._mirrorOutput = True
 		suite, case = test.id().rsplit('.', 1)
+		# suite is '__main__.Tests', which is kind of useless; change to 'test.<platform name>' instead
+		suite = 'test.' + platform.system().lower()
 		self.junitCase = ET.SubElement(self.junitRoot, 'testcase', classname = suite, name = case)
 
 	def stopTest(self, test):

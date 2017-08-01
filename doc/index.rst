@@ -302,6 +302,21 @@ commit, push  The repository is skipped; no command is run
 fetch, pull   Commits are fetched from the origin and head is hard-reset to the pinned version
 ============  ================================================================================
 
+.. _run:
+
+Run arbitrary command on specified repositories
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Run an arbitrary command on a list of :ref:`extended repospecs <multipart_repospec>`. There are two optional arguments. ``--bg`` can be used to run the commands in the background in parallel; by default each invocation will be allowed to finish before the next begins. ``-i`` (or ``--ignore-errors``) can be used to continue on through the repository list if a particular invocation fails; otherwise the first failure is a fatal error. ``--bg`` implies ``--ignore-errors`` since the invocations run simultaneously.
+
+There is also one required argument, ``-x`` (or ``--cmd``). This is to specify where the command begins, and so must be the last argument.
+
+For example::
+
+   $ got project/repo project/repo2 --bg -x make -j8
+
+Got will exit 0 if all invocations were successful. If an invocation failed in foreground mode, Got exits 1 immediately. Otherwise Got will finish the other invocations and exit with the total number that failed. Note that Got will exit non-zero on invocation failure even with ``--ignore-errors`` -- this flag is just to prevent bailing out early.
+
 .. _prune:
 
 Cleanup removed repositories

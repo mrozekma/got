@@ -16,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import timeit
 import traceback
 from typing import *
 from unittest import main, TestCase, TestResult, TextTestRunner
@@ -110,11 +111,14 @@ class GotRun:
 	def fail(self, msg):
 		raise AssertionError(msg)
 
-	def assertWorks(self):
+	def assertExitCode(self, code):
 		self.checkedExit = True
 		ret = self.proc.wait()
-		if ret != 0:
+		if ret != code:
 			self.fail(f"Got exited with code {ret}")
+
+	def assertWorks(self):
+		self.assertExitCode(0)
 
 	def assertFails(self):
 		self.checkedExit = True
@@ -864,6 +868,33 @@ class Tests(TestCase):
 		with GotRun(['repo2+', 'repo1']) as r:
 			expectedDeps = {Path('repo1'), Path('repo2'), Path('repo4')}
 			self.assertEqual(set(r.stdout.strip().split(os.linesep)), set(str(p.resolve()) for p in expectedDeps))
+
+	def test_run(self):
+		self.deps_helper()
+		cmd = 'cd' if platform.system() == 'Windows' else 'pwd'
+		specs = ['repo1', 'repo2', 'repo3']
+		with GotRun(['--run'] + specs + ['-x', cmd]) as r:
+			for spec in specs:
+				r.assertInStderr(spec)
+				r.assertInStdout(str(Path(spec).resolve()))
+
+	def test_run_bg(self):
+		self.deps_helper()
+		# Want a command to run for 3 seconds. This is surprisingly hard on Windows, 'timeout' is really poorly implemented
+		cmd = 'ping 127.0.0.1 -n 3' if platform.system() == 'Windows' else 'sleep 3'
+		specs = ['repo1', 'repo2', 'repo3']
+		with GotRun(['--run'] + specs + ['--bg', '-x', cmd]) as r:
+			# There are 3 invocations each sleeping for 3 seconds, but simultaneously, so this should take 3 seconds.
+			# Leave a little padding and make sure it's less than 5 seconds
+			start = timeit.default_timer()
+			r.assertWorks()
+			end = timeit.default_timer()
+			self.assertTrue(end - start < 5)
+
+	def test_run_ignore_errors(self):
+		self.deps_helper()
+		with GotRun(['--run', 'repo1', 'repo2', 'repo3', '--ignore-errors', '-x', 'command-that-does-not-exist']) as r:
+			r.assertExitCode(3)
 
 @contextlib.contextmanager
 def chdir(path):

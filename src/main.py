@@ -7,6 +7,7 @@ from pathlib import Path
 import platform
 import re
 import shutil
+import subprocess
 import sys
 import time
 
@@ -558,6 +559,32 @@ def prune(interactive: bool) -> None:
 				print(f"Removed {clone.repospec} (missing clone {clone.path})")
 	print(f"Removed {removed}, kept {total - removed}")
 
+def run(repos: Iterable[Iterable[RepoSpec]], cmd: List[str], bg: bool, ignore_errors: bool):
+	env = dict(os.environ)
+	procs = []
+	for set in repos:
+		for repo in set:
+			clone: Clone = where(repo, 'py', 'clone')
+			print(str(clone.repospec), file = sys.stderr)
+			env['GOT_REPOSPEC'] = str(clone.repospec)
+
+			if platform.system() == 'Windows':
+				# Passing a whole command as a single string inside a list won't work on Windows, e.g. -x 'foo bar baz'. Turn it into a raw string instead
+				shell = True
+				if len(cmd) == 1:
+					cmd = cmd[0]
+			else:
+				shell = (len(cmd) == 1)
+
+			proc = subprocess.Popen(cmd, cwd = str(clone.path), shell = shell, env = env)
+			procs.append(proc)
+			if not bg:
+				proc.wait()
+				if not ignore_errors and proc.returncode != 0:
+					raise RuntimeError(f"Failed on {repo}: exit code {proc.returncode}")
+	# Wait for every process to exit. Then exit with the number of processes that failed
+	exit(sum(proc.wait() != 0 for proc in procs))
+
 def getCredential(host: str) -> str:
 	return Host.load(name = host).password
 
@@ -638,6 +665,12 @@ findRootParser.add_argument('dir', nargs = '?', default = str(Path.cwd()), help 
 
 pruneParser = makeMode('prune', prune, 'unregister clones that no longer exist on disk')
 pruneParser.add_argument('-i', '--interactive', action = 'store_true', help = 'prompt before unregistering missing clones')
+
+runParser = makeMode('run', run, 'run an arbitrary command on the specified repositories')
+runParser.add_argument('repos', nargs = '+', type = type_multipart_repospec)
+runParser.add_argument('--bg', action = 'store_true', help = 'run command in the background on each repository in parallel')
+runParser.add_argument('-i', '--ignore-errors', action = 'store_true', help = "don't stop if a command fails")
+runParser.add_argument('-x', '--cmd', required = True, nargs = argparse.REMAINDER, help = 'command to run')
 
 # This is used by git-credential, it's not meant for direct user interaction
 getCredentialParser = makeMode('get-credential', print_return(getCredential, 'host has no stored password'), argparse.SUPPRESS)

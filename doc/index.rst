@@ -149,11 +149,14 @@ Record/forget a local repository
 If you already have a repository cloned on disk, register it with ``--here``. The arguments are a :ref:`repospec <repospec>` and the path to the clone::
 
    $ got --here my-bitbucket:project/repo ~/my-manual-clone
+   my-bitbucket:project/repo is located at ~/my-manual-clone
 
-Normally the host part of a repospec is optional because Got can deduce it, but no host communication is involved in manually registering a clone path, so the host must be specified in the repospec::
+If the host is omitted from the repospec, it will be deduced from the origin URL of the target clone::
 
    $ got --here project/repo ~/my-manual-clone
-   Fatal error: project/repo does not specify the host; it should be of the form <host>:project/repo
+   No host specified -- searching for one with clone URL http://user@localhost:7990/scm/project/repo.git
+   Deduced host my-bitbucket
+   my-bitbucket:project/repo is located at ~/my-manual-clone
 
 Set the path to ``-`` to unregister it from Got. This does not delete the actual clone.
 

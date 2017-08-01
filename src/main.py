@@ -200,8 +200,9 @@ def whereCLI(repos: List[List[RepoSpec]], format: str, on_uncloned: str, ensure_
 
 def here(repo: RepoSpec, dir: str, force: bool) -> Optional[Clone]:
 	with repo.lock():
+		existing: Clone = where(repo, 'py', 'skip', False)
+
 		if dir == '-':
-			existing: Clone = where(repo, 'py', 'skip', False)
 			if existing:
 				existing.delete()
 				print(f"{existing.repospec} no longer has a registered local clone")
@@ -210,11 +211,42 @@ def here(repo: RepoSpec, dir: str, force: bool) -> Optional[Clone]:
 			return
 
 		if repo.host is None:
-			raise ValueError(f"{repo} does not specify the host; it should be of the form <host>:{repo}")
+			# If the host is unspecified, look for one with a clone URL that matches the existing repo
+			# IF the repo doesn't exist or no host has that clone URL, use the first one (this will only work in force mode)
+			firstHost = None
+			try:
+				r = git.Repo(dir)
+				actualUrl = r.remotes['origin'].url
+				if verbose(2):
+					print(f"No host specified -- searching for one with clone URL {actualUrl}")
+			except:
+				if not force:
+					raise RuntimeError(f"Unable to deduce host without an existing clone. Specify the host in the repospec with <host>:{repo} or use --force to choose the first valid host")
+				if verbose(2):
+					print(f"No host specified and {dir} not a valid git host")
+				actualUrl = None
+
+			for host in Host.loadAll():
+				if actualUrl is None:
+					break
+				if firstHost is None:
+					firstHost = host
+				try:
+					cloneUrl = host.getCloneURL(repo.name)
+					if cloneUrl == actualUrl:
+						break
+				except:
+					pass
+			else:
+				if firstHost is None:
+					raise RuntimeError("No hosts registered")
+				host = firstHost
+			repo.host = host.name
+			if verbose(2):
+				print(f"Deduced host {repo.host}")
 
 		dir = Path(dir).resolve()
 		if not force:
-			existing: Clone = where(repo, 'py', 'skip')
 			if existing:
 				raise ValueError(f"{repo} is already mapped to {existing.path}")
 			cloneUrl = Host.load(name = repo.host).getCloneURL(repo.name)

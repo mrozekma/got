@@ -470,6 +470,38 @@ class Tests(TestCase):
 		with GotRun(['--here', f"bitbucket:{repospec}", clonePath, '--force']):
 			pass
 
+	def test_here_no_hosts(self):
+		git.Repo.init('repo').create_remote('origin', 'http://example.com/')
+		with GotRun(['--here', 'foo/bar', 'repo']) as r:
+			r.assertFails()
+			r.assertInStderr('No hosts registered')
+
+	def test_here_deduced_host(self):
+		hostData = self.addBitbucketHost('bitbucket')
+		repospec = hostData['repospecs'][0]
+		git.Repo.init('repo').create_remote('origin', Template(hostData['cloneUrl']).substitute(rs = repospec))
+		with GotRun(['--here', repospec, 'repo']) as r:
+			r.assertInStdout('Deduced host bitbucket')
+
+	def test_here_deduced_multiple_hosts(self):
+		self.addHost('daemon', 'daemon', 'http://example.com', cloneUrl = 'http://example.com/%rs.git')
+		hostData = self.addBitbucketHost('bitbucket')
+		repospec = hostData['repospecs'][0]
+
+		git.Repo.init('repo1').create_remote('origin', 'http://example.com/foo/bar.git')
+		with GotRun(['--here', 'foo/bar', 'repo1']) as r:
+			r.assertInStdout('Deduced host daemon')
+
+		git.Repo.init('repo2').create_remote('origin', Template(hostData['cloneUrl']).substitute(rs = repospec))
+		with GotRun(['--here', repospec, 'repo2']) as r:
+			r.assertInStdout('Deduced host bitbucket')
+
+	def test_here_deduced_host_force(self):
+		self.addHost('daemon', 'daemon', 'http://localhost', 'user', 'pw', force = True)
+		git.Repo.init('repo').create_remote('origin', 'http://example.com/')
+		with GotRun(['--here', 'foo/bar', 'repo', '--force']) as r:
+			r.assertInStdout('Deduced host daemon')
+
 	def test_what_from_root(self):
 		hostData = self.addBitbucketHost('bitbucket')
 		repospec = f"bitbucket:{hostData['repospecs'][0]}"

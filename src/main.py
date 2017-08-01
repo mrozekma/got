@@ -378,35 +378,33 @@ def rmHost(name: str) -> None:
 		print(f"Removed host {name}")
 		print(f"Unregistered {num} {'clone' if num == 1 else 'clones'}")
 
-#TODO Change 'spec' to an Optional[RepoSpec]
-def iterDeps(spec: Optional[str]) -> Iterable[Clone]:
-	if spec is None:
+def iterDeps(repo: Optional[RepoSpec]) -> Iterable[Clone]:
+	if repo is None:
 		try:
-			spec = str(what(None))
+			repo = what(None)
 		except RuntimeError:
 			print("Current directory is not a tracked repository")
 			return
 
 	seen = set()
-	worklist = [spec]
+	worklist = [repo]
 	while worklist:
-		spec = worklist.pop(0)
-		if spec in seen:
+		repo = worklist.pop(0)
+		if repo in seen:
 			continue
-		repo = RepoSpec.fromStr(spec)
 		clone: Clone = where(repo, 'py', 'clone')
-		seen.add(spec)
+		seen.add(repo)
 		yield clone
 
 		depsPath = Path(clone.path) / 'deps.got'
 		if depsPath.exists():
-			worklist += [depSpec for depSpec in depsPath.read_text().split() if depSpec not in seen]
+			worklist += [RepoSpec.fromStr(depSpec) for depSpec in depsPath.read_text().split() if depSpec not in seen]
 		elif len(seen) == 1: # This is the first repo, the one the user specified
 			print(f"{repo} has no dependencies file ({depsPath})")
 
 def deps(repo: Optional[RepoSpec], format: str) -> Iterable[str]:
 	t = Template(format)
-	for clone in iterDeps(None if repo is None else str(repo)):
+	for clone in iterDeps(repo):
 		try:
 			hexsha = git.Repo(str(clone.path)).head.commit.hexsha
 		except:
@@ -439,7 +437,7 @@ def gitPassthrough(directory: Optional[str], ignore_errors: bool, args: List[str
 
 	# Iterate over the root repo and its dependencies
 	failed = 0
-	for clone in iterDeps(str(rootRepo)):
+	for clone in iterDeps(rootRepo):
 		repo = git.Repo(str(clone.path))
 		if clone.repospec.revision and repo.index.diff(None):
 			print(f"{clone.repospec}: Unexpected changes in version-pinned repository")

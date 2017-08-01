@@ -582,6 +582,7 @@ def run(repos: Iterable[Iterable[RepoSpec]], cmd: List[str], bg: bool, ignore_er
 				proc.wait()
 				if not ignore_errors and proc.returncode != 0:
 					raise RuntimeError(f"Failed on {repo}: exit code {proc.returncode}")
+				print()
 	# Wait for every process to exit. Then exit with the number of processes that failed
 	exit(sum(proc.wait() != 0 for proc in procs))
 

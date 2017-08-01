@@ -91,6 +91,9 @@ def type_multipart_repospec(spec: str) -> Iterable[RepoSpec]:
 		else:
 			hosts = Host.loadAll(type = 'bitbucket')
 		specs = [f"{host.name}:{project}/{reponame}" for host in hosts for reponame in host.getReposInProject(project)]
+	# 'spec+' means the spec and its dependencies
+	elif spec.endswith('+'):
+		return [clone.repospec for clone in iterDeps(type_repospec(spec[:-1]))]
 	else:
 		specs = [spec]
 	return map(type_repospec, specs)

@@ -33,6 +33,45 @@ Several modes take an argument type they refer to as a `repository specification
 
 Only ``name`` is mandatory; if ``host`` is omitted all known hosts will be searched, and if ``version`` is omitted the latest version of the repository is pulled. ``version`` is used if the caller requires a particular version of the repository; the clone will be checked out to that refspec and not updated.
 
+.. _multipart_repospec:
+
+Extended form
+~~~~~~~~~~~~~
+
+Certain extended repospec formats are available only in a couple modes (for example, :ref:`where mode <where>`).
+
+In the case of Bitbucket repositories, you can specify ``project/*`` as a shorthand for all repositories in the specified project. For example, if ``project`` contains two repositories, ``repo1`` and ``repo2``, then the following are equivalent::
+
+    $ got 'project/*'
+    $ got project/repo1 project/repo2
+
+This repospec shorthand is only valid with Bitbucket hosts:
+
+.. code-block:: text
+   :emphasize-lines: 3
+
+    $ got --add-host host http://localhost --type daemon
+    $ got 'host:project/*'
+    got --where: error: argument repos: Unable to resolve multipart repospec: host `host' is not a Bitbucket host
+
+If no host is specified, all registered Bitbucket hosts are searched for the specified project.
+
+------
+
+If a list of repospecs is contained within a file (for example, a :ref:`dependency file <dependencies>`), it can be referenced with the repospec ``@filename``. For example, if the file ``foo`` contains the lines ``project/repo1`` and ``project/repo2``, then the following are equivalent::
+
+   $ got @foo project/repo3
+   $ got project/repo1 project/repo2 project/repo3
+
+------
+
+If you want to include a repository and all of its :ref:`dependencies <dependencies>`, you can use the form ``repospec+``. For example, if ``project/repo1`` depends on ``project/repo2``, which depends on ``project/repo3``, then the following are equivalent::
+
+   $ got project/repo1+ project/repo4
+   $ got project/repo1 project/repo2 project/repo3 project/repo4
+
+Because traversing the dependency list requires all the clones to be on disk, parsing this repospec may cause Got to clone repositories if they're not already available. This happens immediately, before the specified Got command is run.
+
 .. _host_types:
 
 Host types
@@ -66,7 +105,7 @@ Find a repository on disk (or clone it if you don't already have it on disk) usi
    $ got --where project/repo
    $ got --local project/repo
 
-The argument is one or more :ref:`repospecs <repospec>`. Got will output the local path to the requested repositories. In verbose mode, it will mention when a repository is being cloned for the first time.
+The argument is one or more :ref:`extended repospecs <multipart_repospec>`. Got will output the local path to the requested repositories. In verbose mode, it will mention when a repository is being cloned for the first time.
 
 .. code-block:: text
    :emphasize-lines: 2-5
@@ -103,33 +142,6 @@ For example::
     ~/.got/repos/__REPO_NOT_FOUND__
 
 If you choose to automatically clone a missing repository, you can specify the destination directory with ``--dest``. If omitted, the directory will be chosen based on the :ref:`clone_root <configuration>`, host name, and repo name.
-
-------
-
-Certain extended repospec formats are available only in where mode:
-
-In the case of Bitbucket repositories, you can specify ``project/*`` as a shorthand for all repositories in the specified project. For example, if ``project`` contains two repositories, ``repo1`` and ``repo2``, then the following are equivalent::
-
-    $ got 'project/*'
-    $ got project/repo1 project/repo2
-
-This repospec shorthand is only valid with Bitbucket hosts:
-
-.. code-block:: text
-   :emphasize-lines: 3
-
-    $ got --add-host host http://localhost --type daemon
-    $ got 'host:project/*'
-    got --where: error: argument repos: Unable to resolve multipart repospec: host `host' is not a Bitbucket host
-
-If no host is specified, all registered Bitbucket hosts are searched for the specified project.
-
-------
-
-If a list of repospecs is contained within a file (for example, a :ref:`dependency file <dependencies>`), it can be referenced with the repospec ``@filename``. For example, if the file ``foo`` contains the lines ``project/repo1`` and ``project/repo2``, then the following are equivalent::
-
-   $ got @foo project/repo3
-   $ got project/repo1 project/repo2 project/repo3
 
 .. _mv:
 

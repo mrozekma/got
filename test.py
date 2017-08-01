@@ -856,6 +856,15 @@ class Tests(TestCase):
 			self.assertEqual(0, p.wait())
 		self.assertTrue(gotRoot.exists())
 
+	def test_repospec_with_deps(self):
+		self.deps_helper()
+		with GotRun(['repo2+']) as r:
+			expectedDeps = {Path('repo2'), Path('repo4')}
+			self.assertEqual(set(r.stdout.strip().split(os.linesep)), set(str(p.resolve()) for p in expectedDeps))
+		with GotRun(['repo2+', 'repo1']) as r:
+			expectedDeps = {Path('repo1'), Path('repo2'), Path('repo4')}
+			self.assertEqual(set(r.stdout.strip().split(os.linesep)), set(str(p.resolve()) for p in expectedDeps))
+
 @contextlib.contextmanager
 def chdir(path):
 	old = Path.cwd()

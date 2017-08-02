@@ -27,8 +27,10 @@ def print_return(f, onNone = None):
 					raise RuntimeError(onNone % kw)
 			else:
 				if isinstance(ret, list) or isinstance(ret, types.GeneratorType):
-					ret = '\n'.join(e for e in ret if e)
-				print(ret, file = outputFile)
+					for e in ret:
+						print(e, file = outputFile)
+				else:
+					print(ret, file = outputFile)
 		finally:
 			sys.stdout = oldStdout
 	return wrap

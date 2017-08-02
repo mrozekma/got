@@ -429,6 +429,8 @@ class Tests(TestCase):
 			r.assertFails()
 			r.assertInStderr("Invalid repospec")
 
+	#TODO Test --where --listen. No ability to control stdin yet
+
 	def test_here(self):
 		hostData = self.addBitbucketHost('bitbucket')
 		repospec = hostData['repospecs'][0]

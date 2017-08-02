@@ -143,6 +143,22 @@ For example::
 
 If you choose to automatically clone a missing repository, you can specify the destination directory with ``--dest``. If omitted, the directory will be chosen based on the :ref:`clone_root <configuration>`, host name, and repo name.
 
+.. _where_listen:
+
+Listening for requests
+^^^^^^^^^^^^^^^^^^^^^^
+
+Where mode also takes the optional argument ``--listen``. In this mode, Got stays in the foreground after processing all command-line repospecs (which are now optional). Further repospecs can be written to stdin, and the corresponding local paths will be outputted. Got will keep processing valid repospecs until stdin is closed or the process is terminated, but will still exit on fatal error conditions.
+
+.. code-block:: text
+   :emphasize-lines: 3-4
+
+   $ echo "project/repo\nproject/repo3" | got --listen
+   ~/.got/repos/host/project/repo
+   project/repo3: no local clone on record
+   Cloning http://user@localhost:7990/scm/project/repo3.git to ~/.got/repos/host/project/repo3
+   ~/.got/repos/host/project/repo3
+
 .. _mv:
 
 Move a local repository

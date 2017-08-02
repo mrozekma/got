@@ -193,14 +193,30 @@ def where(repo: RepoSpec, format: str, on_uncloned: str, ensure_on_disk: bool = 
 		return formatRtn(clone)
 
 # This is an adapter for command-line where mode. 'repos' comes from an argument of type 'multipart_repospec' with '+' nargs, so it's a list of lists of repospecs that needs to be flattened and passed to where() individually
-def whereCLI(repos: List[List[RepoSpec]], format: str, on_uncloned: str, ensure_on_disk: bool = True, dest: bool = None):
+def whereCLI(repos: List[List[RepoSpec]], format: str, on_uncloned: str, dest: str, listen: bool):
 	repos = [spec for l in repos for spec in l]
-	if dest is not None and len(repos) > 1:
-		raise ValueError("Can't specify a clone destination with multiple repospecs")
-	rtn = [where(repo, format, on_uncloned, ensure_on_disk, dest) for repo in repos]
-	if format == 'json': # Convert the list of JSON strings into a JSON list
-		rtn = json.dumps([json.loads(e) for e in rtn])
-	return rtn
+	if not repos and not listen:
+		raise ValueError("One or more repospecs are required unless --listen is provided")
+	if dest is not None and (len(repos) > 1 or listen):
+		raise ValueError("Can't specify a clone destination with multiple repospecs or listen mode")
+
+	lookup = lambda repo: where(repo, format, on_uncloned, False, dest)
+
+	# Special case for JSON format in non-listen mode -- print a list instead of a bunch of individual entries
+	if format == 'json' and not listen:
+		yield json.dumps([json.loads(lookup(repo)) for repo in repos])
+		return
+
+	# In all other cases, print one line per repo
+	for repo in repos:
+		yield lookup(repo)
+
+	if listen:
+		for spec in sys.stdin:
+			spec = spec.strip()
+			if spec:
+				for repo in type_multipart_repospec(spec):
+					yield lookup(repo)
 
 def here(repo: RepoSpec, dir: str, force: bool) -> Optional[Clone]:
 	with repo.lock():
@@ -597,7 +613,7 @@ def makeLock(key = 'test-lock') -> None:
 			time.sleep(5)
 
 whereParser = makeMode('where', print_return(whereCLI), 'find the local path to a package, cloning it from a git host if necessary', ['local'])
-whereParser.add_argument('repos', nargs = '+', type = type_multipart_repospec)
+whereParser.add_argument('repos', nargs = '*', type = type_multipart_repospec)
 whereParser.add_argument('--format', choices = ['plain', 'json'], default = 'plain')
 whereParser.add_argument('-o', '--output-file', dest = 'outputFile', metavar = 'FILE', default = sys.stdout, help = 'optional file to hold the results rather than stdout')
 whereParser.add_argument('--outputFile', help = argparse.SUPPRESS) # backwards-compatible version of --output-file
@@ -605,6 +621,7 @@ group = whereParser.add_mutually_exclusive_group()
 group.add_argument('--on-uncloned', choices = ['clone', 'skip', 'fail', 'fake'], default = 'clone', help = "what to do if the clone doesn't exist")
 group.add_argument('--no-clone', action = 'store_const', dest = 'on_uncloned', const = 'skip', help = argparse.SUPPRESS) # backwards-compatibility version of --on-uncloned=skip
 whereParser.add_argument('-d', '--dest', nargs = '?', default = None, help = 'where to store a new clone if one is made')
+whereParser.add_argument('--listen', action = 'store_true', help = 'read repospecs interactively from stdin')
 
 hereParser = makeMode('here', here, 'set the local path of a package')
 hereParser.add_argument('repo', type = type_repospec)

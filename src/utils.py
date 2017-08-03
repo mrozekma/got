@@ -28,7 +28,7 @@ def print_return(f, onNone = None):
 			else:
 				if isinstance(ret, list) or isinstance(ret, types.GeneratorType):
 					for e in ret:
-						print(e, file = outputFile)
+						print(e, file = outputFile, flush = True)
 				else:
 					print(ret, file = outputFile)
 		finally:

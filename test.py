@@ -16,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import time
 import timeit
 import traceback
 from typing import *
@@ -75,10 +76,13 @@ class GotRun:
 			self.stdout
 		return self._stderr
 
-	def __enter__(self):
+	def makeCommand(self):
 		args = [str(gotDir / 'got')] + [arg for arg in self.args if arg]
 		if platform.system() == 'Windows':
 			args[0] += '.bat'
+		return args
+
+	def makeEnvironment(self):
 		env = os.environ.copy()
 		# The got root is the test case directory under runDir, but we might be in a subdirectory
 		root = Path.cwd()
@@ -89,9 +93,13 @@ class GotRun:
 			else:
 				raise RuntimeError(f"Current directory {Path.cwd().resolve()} is not within a test case rundir")
 		env['GOT_ROOT'] = str(root)
+		return env
+
+	def __enter__(self):
+		args = self.makeCommand()
 		print(f"Run: {args}")
 		print()
-		self.proc = subprocess.Popen(args, env = env, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+		self.proc = subprocess.Popen(args, env = self.makeEnvironment(), stdout = subprocess.PIPE, stderr = subprocess.PIPE)
 		self.proc.__enter__()
 		return self
 
@@ -429,7 +437,59 @@ class Tests(TestCase):
 			r.assertFails()
 			r.assertInStderr("Invalid repospec")
 
-	#TODO Test --where --listen. No ability to control stdin yet
+	def test_where_listen(self):
+		self.deps_helper()
+
+		# Going to run the command directly to control stdin/stdout, but using GotRun for the prep work
+		r = GotRun(['--listen'])
+		args = r.makeCommand()
+		env = r.makeEnvironment()
+		del r
+
+		# This feels like a Python bug, but if I don't redirect stderr somewhere, subprocess closes the inherited pipe it got from us even though we're still using it.
+		with subprocess.Popen(args, env = env, stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.DEVNULL) as proc:
+			def test(spec, unfurlsTo = None):
+				with self.subTest(spec = spec):
+					if unfurlsTo is None:
+						unfurlsTo = [spec]
+					expected = [str(Path(e).resolve()) for e in unfurlsTo]
+
+					proc.stdin.write(f"{spec}\n".encode('utf-8'))
+					proc.stdin.flush()
+					actual = [proc.stdout.readline().decode('utf-8').strip() for _ in unfurlsTo]
+					self.assertEqual(expected, actual)
+
+			test('repo1')
+			test('repo2')
+			test('repo1+', ['repo1', 'repo2', 'repo3', 'repo4'])
+			test('repo2+', ['repo2', 'repo4'])
+
+	def test_where_listen_json(self):
+		self.deps_helper()
+
+		# Going to run the command directly to control stdin/stdout, but using GotRun for the prep work
+		r = GotRun(['--listen', '--format', 'json'])
+		args = r.makeCommand()
+		env = r.makeEnvironment()
+		del r
+
+		# This feels like a Python bug, but if I don't redirect stderr somewhere, subprocess closes the inherited pipe it got from us even though we're still using it.
+		with subprocess.Popen(args, env = env, stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.DEVNULL) as proc:
+			def test(spec, unfurlsTo = None):
+				with self.subTest(spec = spec):
+					if unfurlsTo is None:
+						unfurlsTo = [spec]
+					expected = [{'repospec': f"host:{e}", 'path': str(Path(e).resolve())} for e in unfurlsTo]
+
+					proc.stdin.write(f"{spec}\n".encode('utf-8'))
+					proc.stdin.flush()
+					actual = fromJS(proc.stdout.readline().decode('utf-8').strip())
+					self.assertEqual(expected, actual)
+
+			test('repo1')
+			test('repo2')
+			test('repo1+', ['repo1', 'repo2', 'repo3', 'repo4'])
+			test('repo2+', ['repo2', 'repo4'])
 
 	def test_here(self):
 		hostData = self.addBitbucketHost('bitbucket')

@@ -159,6 +159,16 @@ Where mode also takes the optional argument ``--listen``. In this mode, Got stay
    Cloning http://user@localhost:7990/scm/project/repo3.git to ~/.got/repos/host/project/repo3
    ~/.got/repos/host/project/repo3
 
+This mode is intended for script usage, and unless you're certain how many paths will be printed for a given repospec, JSON output format is recommended. With JSON output, every request returns a single line containing a JSON list of the paths::
+
+   $ cat $(got project/repo)/deps.got
+   project/repo2
+   project/repo3
+
+   $ echo "project/repo\nproject/repo+" | got --listen --format json
+   [{"repospec": "host:project/repo", "path": "~/.got/repos/host/project/repo"}]
+   [{"repospec": "host:project/repo", "path": "~/.got/repos/host/project/repo"}, {"repospec": "host:project/repo2", "path": "~/.got/repos/host/project/repo2"}, {"repospec": "host:project/repo3", "path": "~/.got/repos/host/project/repo3"}]
+
 .. _mv:
 
 Move a local repository
@@ -264,7 +274,6 @@ Placeholder Description                                Example
 For example::
 
    $ cat $(got project/repo)/deps.got
-   project/repo
    project/repo2
    project/repo3
 

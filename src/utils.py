@@ -28,7 +28,11 @@ def print_return(f, onNone = None):
 			else:
 				if isinstance(ret, list) or isinstance(ret, types.GeneratorType):
 					for e in ret:
-						print(e, file = outputFile, flush = True)
+						if e is None:
+							if onNone:
+								raise RuntimeError(onNone % kw)
+						else:
+							print(e, file = outputFile, flush = True)
 				else:
 					print(ret, file = outputFile)
 		finally:

@@ -202,14 +202,13 @@ def whereCLI(repos: List[List[RepoSpec]], format: str, on_uncloned: str, dest: s
 
 	lookup = lambda repo: where(repo, format, on_uncloned, False, dest)
 
-	# JSON format is a list instead of multiple lines
-	if format == 'json' and not listen:
-		yield json.dumps([json.loads(lookup(repo)) for repo in repos])
-		return
-
-	# In all other cases, print one line per repo
-	for repo in repos:
-		yield lookup(repo)
+	if format == 'json' and repos:
+		# JSON format is a list instead of multiple lines
+		yield json.dumps([json.loads(jsonObject) if jsonObject is not None else None for jsonObject in map(lookup, repos)])
+	else:
+		# In all other cases, print one line per repo
+		for repo in repos:
+			yield lookup(repo)
 
 	if listen:
 		for spec in sys.stdin:
@@ -217,7 +216,7 @@ def whereCLI(repos: List[List[RepoSpec]], format: str, on_uncloned: str, dest: s
 			if spec:
 				# JSON format is a list instead of multiple lines
 				if format == 'json':
-					yield json.dumps([json.loads(lookup(repo)) for repo in type_multipart_repospec(spec)])
+					yield json.dumps([json.loads(jsonObject) if jsonObject is not None else None for jsonObject in map(lookup, type_multipart_repospec(spec))])
 				else:
 					for repo in type_multipart_repospec(spec):
 						yield lookup(repo)

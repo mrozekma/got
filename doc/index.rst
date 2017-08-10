@@ -447,6 +447,58 @@ Root storage directory
 
 By default Got stores its database and cloned repositories in a ``.got`` folder within your home directory. This can be overriden by the ``GOT_ROOT`` environment variable. This is useful if you maintain multiple independent builds on one host, particularly build machines.
 
+Make a temporary workspace
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Create a new temporary workspace with ``--worktree``. Analogous to git worktrees, this makes a new temporary directory in which to test things in a clean environment, and opens a new shell in that directory. The new environment has a separate :ref:`got root <got_root>`, but inherits many of the settings from the main Got, including all of its hosts, but notably not its clones. This means you can immediately start making new clones via :ref:`where mode <where>`.
+
+The ``--worktree`` command changes once you're inside a worktree, to change properties of the current worktree instead of making a new one. Both versions take a number of optional arguments.
+
+When creating a worktree, the directory to use can be specified with ``-d`` (or ``--dir``). This directory must be empty (or not exist at all).
+
+To automatically delete the directory when the shell exits, use ``-t`` (or ``--temp``); otherwise it will be left on disk (but by default is stored in a system-specified temporary location like `/tmp`). Once inside a worktree, you can change this setting with ``--keep`` or ``--delete``. You can also avoid deleting a worktree that was marked for deletion by exiting its shell non-zero::
+
+   ~ $ got --worktree -t
+   Making temporary worktree shell at /tmp/got_worktree_4jpmry1a
+
+   (worktree) /tmp/got_worktree_4jpmry1a $ exit
+   Cleaning up worktree
+
+   ~ $ got --worktree -t
+   Making temporary worktree shell at /tmp/got_worktree_6btvmqpc
+
+   (worktree) /tmp/got_worktree_6btvmqpc $ exit 1
+   Temporary worktree exited 1; preserving contents
+
+   ~ $ got --worktree -t
+   Making temporary worktree shell at /tmp/got_worktree_2i1fy0sb
+
+   (worktree) /tmp/got_worktree_2i1fy0sb $ got --worktree --keep
+   Worktree flagged for retention on exit
+
+   (worktree) /tmp/got_worktree_2i1fy0sb $ exit
+
+   ~ $
+
+To include some or all of the parents clones in the worktree, use ``-r`` (or ``--with-repos`` on creation, ``--import-repos`` within an existing worktree). This makes entries in the worktree's clone list, pointing at the parent's clones. Note that this means changes to those clones will change the parent; Got does not undo these changes on worktree cleanup. If you specify one or more repospecs, e.g. ``-r project/repo1 project/repo2``, those clones will be imported from the parent (if they exist). You can use ``*`` anywhere in these repospecs to match many, e.g. ``project/*`` or even ``*j*/*3``. If you specify ``-r`` with no repospecs, all clones are imported from the parent.
+
+::
+
+   ~ $ got project/repo1 project/repo2
+   ~/.got/repos/host/project/repo1
+   ~/.got/repos/host/project/repo2
+
+   ~ $ got --worktree -r project/repo1
+   Making worktree shell at /tmp/got_worktree_40wxvzdw
+
+   (worktree) /tmp/got_worktree_40wxvzdw $ got project/repo1
+   ~/.got/repos/host/project/repo1
+
+   (worktree) /tmp/got_worktree_40wxvzdw $ got project/repo2
+   project/repo2: no local clone on record
+   Cloning http://user@localhost:7990/scm/project/repo2.git to /tmp/got_worktree_40wxvzdw/repos/host/project/repo2
+   /tmp/got_worktree_40wxvzdw/repos/host/project/repo2
+
 .. _dependencies:
 
 Dependencies

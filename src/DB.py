@@ -86,13 +86,17 @@ def savepointNameGenerator():
 savepointNameGenerator = savepointNameGenerator()
 
 class DB:
-	def __init__(self, path: Path):
-		os.makedirs(path.parent, exist_ok = True)
-		self.conn = sqlite3.connect(str(path), isolation_level = None)
+	def __init__(self, dir: Path):
+		os.makedirs(dir, exist_ok = True)
+		self.path = dir / 'db'
+		self.conn = sqlite3.connect(str(self.path), isolation_level = None)
 		self.conn.row_factory = sqlite3.Row
-		self.schemaUpdates(path)
+		self.schemaUpdates()
 
-	def schemaUpdates(self, path):
+	def close(self):
+		self.conn.close()
+
+	def schemaUpdates(self):
 		with self.transaction(True):
 			version = startVersion = next(self.select("PRAGMA user_version"))['user_version']
 			for version, updater in enumerate(schemaUpdates[startVersion+1:], startVersion + 1):
@@ -105,10 +109,33 @@ class DB:
 			self.update(f"PRAGMA user_version = {version}")
 			if verbose(2):
 				if startVersion == 0:
-					print("New database created at %s" % path, file = sys.stderr)
+					print("New database created at %s" % self.path, file = sys.stderr)
 				else:
 					print(f"Database updated to version {version}")
 			return True
+
+	@contextmanager
+	def attachDatabase(self, name: str, db: Union[Path, 'DB']):
+		if isinstance(db, DB):
+			db = db.path
+		self.update("ATTACH DATABASE ? as ?", db, name)
+		try:
+			yield
+		finally:
+			self.update("DETACH DATABASE ?", name)
+
+	def worktreeSetup(self, parent: Union[Path, 'DB']):
+		with self.attachDatabase('parent', parent):
+			# Might want to include some rows from 'config' in the future, but currently the only one is 'clone_root', which we don't want
+			for table in ('credentials', 'bitbucket_hosts', 'daemon_hosts'):
+				self.update("INSERT INTO main.%s SELECT * FROM parent.%s" % (table, table))
+
+	def importRepos(self, source: Union[Path, 'DB'], patterns: List[str]):
+		with self.attachDatabase('source', source):
+			placeholders = ["repospec LIKE ?" for _ in patterns]
+			vals = [repo.replace('%', '\\%').replace('*', '%') for repo in patterns]
+			vals = [val if ':' in val else f"%:{val}" for val in vals]
+			self.update(f"INSERT OR IGNORE INTO main.clones SELECT * from source.clones WHERE {' OR '.join(placeholders)} ESCAPE '\\'", *vals)
 
 	@contextmanager
 	def transaction(self, exclusive = False):
@@ -328,4 +355,4 @@ from pathlib import PosixPath, WindowsPath
 for cls in (Path, PosixPath, WindowsPath):
 	registerType(cls, str, Path)
 
-db = DB(gotRoot / 'db')
+db = DB(gotRoot)

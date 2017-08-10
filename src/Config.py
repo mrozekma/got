@@ -1,6 +1,7 @@
 from .DB import ActiveRecord
 from .utils import gotRoot
 
+import os
 from typing import *
 
 DEFAULT_CONFIG = {
@@ -12,7 +13,8 @@ class Config(ActiveRecord):
 		self.key = key
 		self.value = value
 
-		if key not in DEFAULT_CONFIG:
+		# Worktrees are allowed to stash info in their config list since they're temporary
+		if key not in DEFAULT_CONFIG and (not key.startswith('worktree_') or 'GOT_WORKTREE' not in os.environ):
 			raise ValueError(f"Unrecognized configuration key: {key}")
 
 	@staticmethod
@@ -28,8 +30,6 @@ class ConfigInterface:
 			raise ValueError(f"Unrecognized configuration key: {k}")
 
 	def __setattr__(self, k: str, v: str):
-		# Make sure the key exists
-		getattr(self, k)
 		Config(k, v).save()
 
 	def all(self) -> Iterable[Config]:

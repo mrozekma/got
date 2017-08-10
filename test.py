@@ -958,6 +958,8 @@ class Tests(TestCase):
 		with GotRun(['--run', 'repo1', 'repo2', 'repo3', '--ignore-errors', '-x', 'command-that-does-not-exist']) as r:
 			r.assertExitCode(3)
 
+	#TODO Test --worktree?
+
 @contextlib.contextmanager
 def chdir(path):
 	old = Path.cwd()

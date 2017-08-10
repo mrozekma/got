@@ -9,16 +9,17 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 
-from .DB import db, Like
+from .DB import db, DB, Like
 from .Credential import Credential
 from .Config import config
 from .Clone import Clone
 from .Host import Host
 
 from .RepoSpec import RepoSpec, HOST_PATTERN
-from .utils import print_return, makeGitEnvironment, verbose, Template
+from .utils import print_return, gotRoot, makeGitEnvironment, verbose, Template
 
 # Type hints
 from typing import *
@@ -188,7 +189,7 @@ def where(repo: RepoSpec, format: str, on_uncloned: str, ensure_on_disk: bool = 
 		# In the meantime I just run git clone directly
 		# git.Repo.clone_from(url, str(localPath), env = makeGitEnvironment(host), progress = GitProgress())
 
-		env = os.environ.copy()
+		env = dict(os.environ)
 		env.update(makeGitEnvironment(host))
 		proc = subprocess.Popen(['git', 'clone', '-v', '--progress', url, str(localPath)], env = env, stderr = subprocess.PIPE, universal_newlines = True)
 		stderr = []
@@ -624,6 +625,69 @@ def run(repos: Iterable[Iterable[RepoSpec]], cmd: List[str], bg: bool, ignore_er
 	# Wait for every process to exit. Then exit with the number of processes that failed
 	exit(sum(proc.wait() != 0 for proc in procs))
 
+def worktree(dir: Optional[str], temp: bool, with_repos: Optional[List[str]]):
+	dir = Path(dir or tempfile.mkdtemp(prefix = 'got_worktree_')).resolve()
+	if dir.exists():
+		try:
+			next(dir.iterdir())
+			raise RuntimeError(f"{dir} already exists and contains files")
+		except StopIteration:
+			pass
+
+	env = dict(os.environ)
+	env['GOT_WORKTREE'] = '1'
+	env['GOT_PARENT_ROOT'] = str(gotRoot)
+	env['GOT_ROOT'] = str(dir)
+	if platform.system() == 'Windows':
+		shell = [env.get('COMSPEC', 'cmd.exe')]
+		promptVar, promptDefault = 'PROMPT', '$P$G'
+	else:
+		shell = [env.get('SHELL', '/bin/sh'), '-i']
+		promptVar, promptDefault = 'PS1', r'\u@\h:\w\$'
+	env[promptVar] = f"(worktree) {env.get(promptVar, promptDefault)}"
+	print(f"Making {'temporary ' if temp else ''}worktree shell at {dir}")
+
+	# Run got in the new root just to make the empty database
+	# (The main reason to do this is so clone_root is set right. Might be easier to just patch that in the new database, but it feels ugly)
+	if subprocess.Popen([sys.executable, sys.argv[0]], cwd = str(dir), env = env, stdout = subprocess.DEVNULL, stderr = subprocess.DEVNULL).wait() != 0:
+		raise RuntimeError("Failed to run initial got in worktree dir")
+
+	# Import info from the parent database
+	worktreeDb = DB(dir)
+	worktreeDb.worktreeSetup(db)
+	# with_repos is None if none should be imported, [] if all should be imported, or [...] if just the listed patterns should be imported
+	if with_repos is not None:
+		worktreeDb.importRepos(db, with_repos or ['*'])
+
+	# Run the shell
+	res = subprocess.Popen(shell, cwd = str(dir), env = env).wait()
+
+	# If the user specified a new retention setting within the worktree, use it
+	for row in worktreeDb.select("SELECT value FROM config WHERE key = ?", 'worktree_keep'):
+		temp = (row['value'] != 'true')
+	worktreeDb.close()
+
+	if temp:
+		if res != 0:
+			print(f"Temporary worktree exited {res}; preserving contents")
+		else:
+			print("Cleaning up worktree")
+			shutil.rmtree(dir)
+
+def worktreeActive(keep: Optional[bool], import_repos: Optional[List[str]]):
+	didWork = False
+	if keep is not None:
+		config.worktree_keep = 'true' if keep else 'false'
+		print(f"Worktree flagged for {'retention' if keep else 'deletion'} on exit")
+		didWork = True
+	if import_repos is not None:
+		parentDb = DB(Path(os.environ['GOT_PARENT_ROOT']))
+		db.importRepos(parentDb, import_repos)
+		print(f"Worktree imported new repositories")
+		didWork = True
+	if not didWork:
+		print(f"Currently in worktree: {gotRoot}")
+
 def getCredential(host: str) -> str:
 	return Host.load(name = host).password
 
@@ -711,6 +775,17 @@ runParser.add_argument('repos', nargs = '+', type = type_multipart_repospec)
 runParser.add_argument('--bg', action = 'store_true', help = 'run command in the background on each repository in parallel')
 runParser.add_argument('-i', '--ignore-errors', action = 'store_true', help = "don't stop if a command fails")
 runParser.add_argument('-x', '--cmd', required = True, nargs = argparse.REMAINDER, help = 'command to run')
+
+if 'GOT_WORKTREE' not in os.environ:
+	worktreeParser = makeMode('worktree', worktree, 'make a new shell with an isolated got root')
+	worktreeParser.add_argument('-d', '--dir', help = 'root path to use for new worktree')
+	worktreeParser.add_argument('-t', '--temp', action = 'store_true', help = 'delete the worktree on exit')
+	worktreeParser.add_argument('-r', '--with-repos', nargs = '*', help = 'import repos from the parent got')
+else:
+	worktreeParser = makeMode('worktree', worktreeActive, 'change properties of the current worktree')
+	worktreeParser.add_argument('--keep', action = 'store_true', default = None, help = 'preserve the worktree on exit, even if created with --temp')
+	worktreeParser.add_argument('--delete', action = 'store_false', dest = 'keep', help = 'delete the worktree on exit, even if created without --temp')
+	worktreeParser.add_argument('-r', '--import-repos', nargs = '+', help = 'import (more) repos from the parent got')
 
 # This is used by git-credential, it's not meant for direct user interaction
 getCredentialParser = makeMode('get-credential', print_return(getCredential, 'host has no stored password'), argparse.SUPPRESS)

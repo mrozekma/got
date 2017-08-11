@@ -71,12 +71,15 @@ def v1(db):
 
 			for src in archiveSrcs:
 				zip.write(str(src), os.path.basename(src))
-	archivePath = gotRoot / 'old_database.zip'
-	shutil.move(f.name, archivePath)
-	for p in archiveSrcs:
-		p.unlink()
-	if archiveSrcs and verbose(2):
-		print(f"Imported old JSON database. Archived files at {archivePath.resolve()}", file = sys.stderr)
+	if archiveSrcs:
+		archivePath = gotRoot / 'old_database.zip'
+		shutil.move(f.name, archivePath)
+		for p in archiveSrcs:
+			p.unlink()
+		if verbose(2):
+			print(f"Imported old JSON database. Archived files at {archivePath.resolve()}", file = sys.stderr)
+	else:
+		os.unlink(f.name)
 
 def savepointNameGenerator():
 	i = 1

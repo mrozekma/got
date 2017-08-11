@@ -183,26 +183,7 @@ def where(repo: RepoSpec, format: str, on_uncloned: str, ensure_on_disk: bool = 
 		os.makedirs(localPath.parent, exist_ok = True)
 		if verbose(1):
 			print(f"Cloning {url} to {localPath}")
-		from .GitProgress import GitProgress
-
-		# There seems to be a GitPython bug that prevent this from working well: https://github.com/gitpython-developers/GitPython/issues/444#issuecomment-320523860
-		# In the meantime I just run git clone directly
-		# git.Repo.clone_from(url, str(localPath), env = makeGitEnvironment(host), progress = GitProgress())
-
-		env = dict(os.environ)
-		env.update(makeGitEnvironment(host))
-		proc = subprocess.Popen(['git', 'clone', '-v', '--progress', url, str(localPath)], env = env, stderr = subprocess.PIPE, universal_newlines = True)
-		stderr = []
-		if verbose(1) and sys.stdout.isatty():
-			progress = GitProgress()
-			handler = progress.new_message_handler()
-			for line in proc.stderr:
-				stderr.append(line)
-				handler(line)
-			progress.finish()
-		if proc.wait() != 0:
-			raise RuntimeError("Clone failed:\n" + ''.join(stderr))
-
+		git.Repo.clone_from(url, str(localPath), env = makeGitEnvironment(host))
 		if repo.revision is not None:
 			r = git.Repo(str(localPath))
 			r.head.reference = r.commit(repo.revision)

@@ -1,6 +1,5 @@
 gitpython # git
 keyring
-progressbar2 # progressbar
 psutil
 stashy
 wincertstore; sys_platform == 'win32'

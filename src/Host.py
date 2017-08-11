@@ -140,7 +140,7 @@ class BitbucketHost(SubclassableHost, ActiveRecord):
 		if self.clone_url is not None:
 			return self.getCloneURLFromPattern(name)
 		if self.password is None:
-			raise RuntimeError("Unable to determine Bitbucket clone URL without authentication")
+			raise RuntimeError(f"Unable to access Bitbucket API to determine clone URL -- host `{self.name}' must be configured with a manual clone URl or a username/password")
 
 		try:
 			data = self.conn.projects[project].repos[repoName].get()
@@ -161,7 +161,7 @@ class BitbucketHost(SubclassableHost, ActiveRecord):
 
 	def getReposInProject(self, project):
 		if self.password is None:
-			raise RuntimeError("Unable to access Bitbucket project repository list without authentication")
+			raise RuntimeError(f"Unable to access Bitbucket API to query project repository list -- host `{self.name}' must be configured with a username/password")
 		try:
 			return [json['name'] for json in self.conn.projects[project].repos.all()]
 		except stashy.errors.NotFoundException as e:

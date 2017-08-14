@@ -942,16 +942,16 @@ class Tests(TestCase):
 
 	def test_run_bg(self):
 		self.deps_helper()
-		# Want a command to run for 3 seconds. This is surprisingly hard on Windows, 'timeout' is really poorly implemented
-		cmd = 'ping 127.0.0.1 -n 3' if platform.system() == 'Windows' else 'sleep 3'
-		specs = ['repo1', 'repo2', 'repo3']
+		# Want a command to run for 10 seconds. This is surprisingly hard on Windows, 'timeout' is really poorly implemented
+		cmd = 'ping 127.0.0.1 -n 10' if platform.system() == 'Windows' else 'sleep 10'
+		specs = ['repo1', 'repo2', 'repo3', 'repo4']
 		with GotRun(['--run'] + specs + ['--bg', '-x', cmd]) as r:
-			# There are 3 invocations each sleeping for 3 seconds, but simultaneously, so this should take 3 seconds.
-			# Leave a little padding and make sure it's less than 5 seconds
+			# There are 4 invocations each sleeping for 10 seconds, but simultaneously, so this should take 10 seconds.
+			# Leave a lot of padding and make sure it's less than 25 seconds
 			start = timeit.default_timer()
 			r.assertWorks()
 			end = timeit.default_timer()
-			self.assertTrue(end - start < 5)
+			self.assertTrue(end - start < 25)
 
 	def test_run_ignore_errors(self):
 		self.deps_helper()

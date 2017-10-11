@@ -8,7 +8,7 @@ def build(doCheckout) {
 	mrcy.run "${tool 'python3'} -m pip install --user -r test-requirements.txt"
 
 	withCredentials([file(credentialsId: 'got-host-data', variable: 'hostDataFile')]) {
-		withCredentials([file(credentialsId: 'bitbucket-key-file', variable: 'sshkey')]) {
+		withCredentials([sshUserPrivateKey(credentialsId: 'bitbucket', keyFileVariable: 'sshkey')]) {
 			def hostData = readFile hostDataFile
 			hostData = hostData.replace('\$SSH_KEY', sshkey.replace('\\', '/'))
 			writeFile file: 'host-data.json', text: hostData

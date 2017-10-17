@@ -140,7 +140,7 @@ class BitbucketHost(SubclassableHost, ActiveRecord):
 		if self.clone_url is not None:
 			return self.getCloneURLFromPattern(name)
 		if self.password is None:
-			raise RuntimeError(f"Unable to access Bitbucket API to determine clone URL -- host `{self.name}' must be configured with a manual clone URl or a username/password")
+			raise RuntimeError(f"Unable to access Bitbucket API to determine clone URL -- host `{self.name}' must be configured with a manual clone URL or a username/password")
 
 		try:
 			data = self.conn.projects[project].repos[repoName].get()

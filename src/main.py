@@ -193,7 +193,7 @@ def where(repo: RepoSpec, format: str, on_uncloned: str, ensure_on_disk: bool = 
 
 		env = dict(os.environ)
 		env.update(makeGitEnvironment(host))
-		proc = subprocess.Popen(['git', 'clone', '-v', '--progress', url, str(localPath)], env = env, stdout = subprocess.DEVNULL, stderr = subprocess.PIPE if progress is not None else subprocess.DEVNULL, universal_newlines = True)
+		proc = subprocess.Popen(['git', 'clone', '-v', '--progress', url, str(localPath)], env = env, stdout = subprocess.DEVNULL, stderr = subprocess.PIPE, universal_newlines = True)
 		stderr = []
 		if progress is not None:
 			progress = GitProgress()
@@ -202,6 +202,9 @@ def where(repo: RepoSpec, format: str, on_uncloned: str, ensure_on_disk: bool = 
 				stderr.append(line)
 				handler(line)
 			progress.finish()
+		else:
+			for line in proc.stderr:
+				stderr.append(line)
 		if proc.wait() != 0:
 			raise RuntimeError("Clone failed:\n" + ''.join(stderr))
 

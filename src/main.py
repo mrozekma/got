@@ -461,7 +461,7 @@ def rmHost(name: str) -> None:
 		print(f"Removed host {name}")
 		print(f"Unregistered {num} {'clone' if num == 1 else 'clones'}")
 
-def iterDeps(repo: Optional[RepoSpec]) -> Iterable[Clone]:
+def iterDeps(repo: Optional[RepoSpec], startFilename: str = 'deps.got') -> Iterable[Clone]:
 	if repo is None:
 		try:
 			repo = what(None)
@@ -470,24 +470,24 @@ def iterDeps(repo: Optional[RepoSpec]) -> Iterable[Clone]:
 			return
 
 	seen = set()
-	worklist = [repo]
+	worklist = [(repo, startFilename)]
 	while worklist:
-		repo = worklist.pop(0)
+		repo, depsFilename = worklist.pop(0)
 		if repo in seen:
 			continue
 		clone: Clone = where(repo, 'py', 'clone')
 		seen.add(repo)
 		yield clone
 
-		depsPath = Path(clone.path) / 'deps.got'
+		depsPath = Path(clone.path) / depsFilename
 		if depsPath.exists():
-			worklist += [RepoSpec.fromStr(depSpec) for depSpec in depsPath.read_text().split() if depSpec not in seen]
+			worklist += [(RepoSpec.fromStr(depSpec), 'deps.got') for depSpec in depsPath.read_text().split() if depSpec not in seen]
 		elif len(seen) == 1: # This is the first repo, the one the user specified
 			print(f"{repo} has no dependencies file ({depsPath})")
 
-def deps(repo: Optional[RepoSpec], format: str) -> Iterable[str]:
+def deps(repo: Optional[RepoSpec], format: str, file: str) -> Iterable[str]:
 	t = Template(format)
-	for clone in iterDeps(repo):
+	for clone in iterDeps(repo, file):
 		try:
 			hexsha = git.Repo(str(clone.path)).head.commit.hexsha
 		except:
@@ -761,6 +761,7 @@ rmHostParser.add_argument('name', type = type_host_name)
 depsParser = makeMode('deps', print_return(deps), "list information about a repo's dependencies")
 depsParser.add_argument('repo', nargs = '?', type = type_repospec, default = None)
 depsParser.add_argument('--format', default = '%p', help = 'Format to display each line in')
+depsParser.add_argument('-f', '--file', default = 'deps.got', help = 'File to read dependency information from')
 
 gitParser = makeMode('git', gitPassthrough, 'run a git command on the repo and all its dependencies')
 gitParser.add_argument('-C', '--directory', metavar = 'DIR', default = '.', help = 'root directory')

@@ -259,7 +259,7 @@ Find the root of a got-tracked repository given a path within it using ``--find-
 List local dependency info
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Recursively list information about all the repositories the given repository depends on using ``--deps``. The arguments are an optional :ref:`repospec <repospec>` and format for the information to take. By default the current repository is used, and the format is ``%p``. Dependencies come from a :ref:`dependency file <dependencies>`.  Each dependent repository will be fetched a single time, even when cycles exist in the dependency files.
+Recursively list information about all the repositories the given repository depends on using ``--deps``. The arguments are an optional :ref:`repospec <repospec>` and format for the information to take. By default the current repository is used, and the format is ``%p``. Dependencies come from a :ref:`dependency file <dependencies>`. By default the first file queried is ``deps.got`` in the current repository's root, but this can be overriden with ``--file``. Each dependent repository will be fetched a single time, even when cycles exist in the dependency files.
 
 The format specifier loosely models the "pretty formats" used by commands like `git show` and `git log`. The following placeholders are available:
 

@@ -171,6 +171,11 @@ This mode is intended for script usage, and unless you're certain how many paths
    [{"repospec": "host:project/repo", "path": "~/.got/repos/host/project/repo"}]
    [{"repospec": "host:project/repo", "path": "~/.got/repos/host/project/repo"}, {"repospec": "host:project/repo2", "path": "~/.got/repos/host/project/repo2"}, {"repospec": "host:project/repo3", "path": "~/.got/repos/host/project/repo3"}]
 
+Recording requests
+^^^^^^^^^^^^^^^^^^
+
+To keep a log of all where mode requests, set the environment variable ``GOT_WHERE_LOG``. Got will append requested repospecs to this file as they occur. This can be useful for generating a :ref:`dependency file <dependencies>` for a repository, by building that repository with where logging enabled.
+
 .. _mv:
 
 Move a local repository

@@ -152,6 +152,13 @@ def where(repo: RepoSpec, format: str, on_uncloned: str, ensure_on_disk: bool = 
 		elif pnt:
 			print(f"{repo}: no local clone on record")
 
+	if 'GOT_WHERE_LOG' in os.environ:
+		try:
+			with open(os.environ['GOT_WHERE_LOG'], 'a') as f:
+				f.write(f"{repo}\n")
+		except IOError as e:
+			print(f"Failed to log {repo} query to {os.environ['GOT_WHERE_LOG']}: {e}")
+
 	rtn = lookupRepo()
 	if rtn is not None:
 		return rtn

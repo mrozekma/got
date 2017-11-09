@@ -144,6 +144,9 @@ def where(repo: RepoSpec, format: str, on_uncloned: str, ensure_on_disk: bool = 
 				return formatRtn(clone)
 			elif pnt:
 				print(f"{repo}: local clone `{clone.path}' no longer exists")
+			nonlocal dest
+			if dest is None:
+				dest = str(clone.path)
 		elif len(candidates) > 1:
 			raise RuntimeError(f"{repo}: Ambiguous repospec matches multiple clones: {', '.join(clone.repospec for clone in candidates)}")
 		elif pnt:
@@ -218,14 +221,14 @@ def where(repo: RepoSpec, format: str, on_uncloned: str, ensure_on_disk: bool = 
 		return formatRtn(clone)
 
 # This is an adapter for command-line where mode. 'repos' comes from an argument of type 'multipart_repospec' with '+' nargs, so it's a list of lists of repospecs that needs to be flattened and passed to where() individually
-def whereCLI(repos: List[List[RepoSpec]], format: str, on_uncloned: str, dest: str, listen: bool):
+def whereCLI(repos: List[List[RepoSpec]], format: str, on_uncloned: str, dest: str, listen: bool, ignore_missing: bool):
 	repos = [spec for l in repos for spec in l]
 	if not repos and not listen:
 		raise ValueError("One or more repospecs are required unless --listen is provided")
 	if dest is not None and (len(repos) > 1 or listen):
 		raise ValueError("Can't specify a clone destination with multiple repospecs or listen mode")
 
-	lookup = lambda repo: where(repo, format, on_uncloned, False, dest)
+	lookup = lambda repo: where(repo, format, on_uncloned, not ignore_missing, dest)
 
 	if format == 'json' and repos:
 		# JSON format is a list instead of multiple lines
@@ -714,6 +717,7 @@ group = whereParser.add_mutually_exclusive_group()
 group.add_argument('--on-uncloned', choices = ['clone', 'skip', 'fail', 'fake'], default = 'clone', help = "what to do if the clone doesn't exist")
 group.add_argument('--no-clone', action = 'store_const', dest = 'on_uncloned', const = 'skip', help = argparse.SUPPRESS) # backwards-compatibility version of --on-uncloned=skip
 whereParser.add_argument('-d', '--dest', nargs = '?', default = None, help = 'where to store a new clone if one is made')
+whereParser.add_argument('--ignore-missing', action = 'store_true', help = 'return a recorded path even if it no longer exists')
 whereParser.add_argument('--listen', action = 'store_true', help = 'read repospecs interactively from stdin')
 
 hereParser = makeMode('here', here, 'set the local path of a package')

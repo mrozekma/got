@@ -143,6 +143,8 @@ For example::
 
 If you choose to automatically clone a missing repository, you can specify the destination directory with ``--dest``. If omitted, the directory will be chosen based on the :ref:`clone_root <configuration>`, host name, and repo name.
 
+If a repository was previously cloned but no longer exists no disk, by default it will be re-cloned to the path Got expected to find it. If you want to avoid this, pass ``--ignore-missing`` and Got will output the expected path to the repository even though it doesn't exist.
+
 .. _where_listen:
 
 Listening for requests

@@ -468,31 +468,38 @@ def rmHost(name: str) -> None:
 		print(f"Removed host {name}")
 		print(f"Unregistered {num} {'clone' if num == 1 else 'clones'}")
 
-def iterDeps(repo: Optional[RepoSpec], startFilename: str = 'deps.got') -> Iterable[Clone]:
-	if repo is None:
-		try:
-			repo = what(None)
-		except RuntimeError:
-			print("Current directory is not a tracked repository")
-			return
+def iterDeps(repo: Optional[RepoSpec], startPath: Optional[Path] = None) -> Iterable[Clone]:
+	if startPath is None:
+		if repo is None:
+			try:
+				repo = what(None)
+			except RuntimeError:
+				print("Current directory is not a tracked repository")
+				return
+		worklist = [repo]
+	else:
+		worklist = [RepoSpec.fromStr(depSpec) for depSpec in startPath.read_text().split()]
 
 	seen = set()
-	worklist = [(repo, startFilename)]
 	while worklist:
-		repo, depsFilename = worklist.pop(0)
+		repo = worklist.pop(0)
 		if repo in seen:
 			continue
 		clone: Clone = where(repo, 'py', 'clone')
 		seen.add(repo)
 		yield clone
 
-		depsPath = Path(clone.path) / depsFilename
+		depsPath = Path(clone.path) / 'deps.got'
 		if depsPath.exists():
-			worklist += [(RepoSpec.fromStr(depSpec), 'deps.got') for depSpec in depsPath.read_text().split() if depSpec not in seen]
-		elif len(seen) == 1: # This is the first repo, the one the user specified
+			worklist += [RepoSpec.fromStr(depSpec) for depSpec in depsPath.read_text().split() if depSpec not in seen]
+		elif len(seen) == 1 and startPath is None: # This is the first repo, the one the user specified
 			print(f"{repo} has no dependencies file ({depsPath})")
 
-def deps(repo: Optional[RepoSpec], format: str, file: str) -> Iterable[str]:
+def deps(repo: Optional[RepoSpec], format: str, file: Optional[str]) -> Iterable[str]:
+	if file is not None:
+		file = Path(file)
+		if not file.exists():
+			raise ValueError(f"Dependency file does not exist: {file}")
 	t = Template(format)
 	for clone in iterDeps(repo, file):
 		try:
@@ -768,7 +775,7 @@ rmHostParser.add_argument('name', type = type_host_name)
 depsParser = makeMode('deps', print_return(deps), "list information about a repo's dependencies")
 depsParser.add_argument('repo', nargs = '?', type = type_repospec, default = None)
 depsParser.add_argument('--format', default = '%p', help = 'Format to display each line in')
-depsParser.add_argument('-f', '--file', default = 'deps.got', help = 'File to read dependency information from')
+depsParser.add_argument('-f', '--file', default = None, help = 'File to read dependency information from')
 
 gitParser = makeMode('git', gitPassthrough, 'run a git command on the repo and all its dependencies')
 gitParser.add_argument('-C', '--directory', metavar = 'DIR', default = '.', help = 'root directory')

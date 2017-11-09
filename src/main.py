@@ -468,7 +468,7 @@ def rmHost(name: str) -> None:
 		print(f"Removed host {name}")
 		print(f"Unregistered {num} {'clone' if num == 1 else 'clones'}")
 
-def iterDeps(repo: Optional[RepoSpec], startPath: Optional[Path] = None) -> Iterable[Clone]:
+def iterDeps(repo: Optional[RepoSpec], on_uncloned: str = 'clone', startPath: Optional[Path] = None) -> Iterable[Clone]:
 	if startPath is None:
 		if repo is None:
 			try:
@@ -485,8 +485,11 @@ def iterDeps(repo: Optional[RepoSpec], startPath: Optional[Path] = None) -> Iter
 		repo = worklist.pop(0)
 		if repo in seen:
 			continue
-		clone: Clone = where(repo, 'py', 'clone')
 		seen.add(repo)
+		clone: Clone = where(repo, 'py', on_uncloned)
+		if clone is None:
+			continue
+
 		yield clone
 
 		depsPath = Path(clone.path) / 'deps.got'
@@ -495,13 +498,13 @@ def iterDeps(repo: Optional[RepoSpec], startPath: Optional[Path] = None) -> Iter
 		elif len(seen) == 1 and startPath is None: # This is the first repo, the one the user specified
 			print(f"{repo} has no dependencies file ({depsPath})")
 
-def deps(repo: Optional[RepoSpec], format: str, file: Optional[str]) -> Iterable[str]:
+def deps(repo: Optional[RepoSpec], format: str, file: Optional[str], on_uncloned: str) -> Iterable[str]:
 	if file is not None:
 		file = Path(file)
 		if not file.exists():
 			raise ValueError(f"Dependency file does not exist: {file}")
 	t = Template(format)
-	for clone in iterDeps(repo, file):
+	for clone in iterDeps(repo, on_uncloned, file):
 		try:
 			hexsha = git.Repo(str(clone.path)).head.commit.hexsha
 		except:
@@ -776,6 +779,7 @@ depsParser = makeMode('deps', print_return(deps), "list information about a repo
 depsParser.add_argument('repo', nargs = '?', type = type_repospec, default = None)
 depsParser.add_argument('--format', default = '%p', help = 'Format to display each line in')
 depsParser.add_argument('-f', '--file', default = None, help = 'File to read dependency information from')
+depsParser.add_argument('--on-uncloned', choices = ['clone', 'skip', 'fail'], default = 'clone', help = "what to do if a dependency doesn't exist")
 
 gitParser = makeMode('git', gitPassthrough, 'run a git command on the repo and all its dependencies')
 gitParser.add_argument('-C', '--directory', metavar = 'DIR', default = '.', help = 'root directory')

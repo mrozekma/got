@@ -638,6 +638,8 @@ def worktree(dir: Optional[str], temp: bool, with_repos: Optional[List[str]]):
 			raise RuntimeError(f"{dir} already exists and contains files")
 		except StopIteration:
 			pass
+	else:
+		dir.mkdir(parents = True)
 
 	env = dict(os.environ)
 	env['GOT_WORKTREE'] = '1'

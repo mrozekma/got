@@ -8,6 +8,8 @@ class Clone(ActiveRecord):
 	def __init__(self, repospec: RepoSpec, path: Path):
 		self.repospec = repospec if isinstance(repospec, RepoSpec) else RepoSpec.fromStr(repospec)
 		self.path = path if isinstance(path, Path) else Path(path)
+		if self.path.exists():
+			self.path = self.path.resolve()
 
 	@classmethod
 	def loadSpec(cls, repospec: RepoSpec):

@@ -81,6 +81,16 @@ def v1(db):
 	else:
 		os.unlink(f.name)
 
+@schemaUpdate
+def v2(db):
+	# Store canonical paths in the database
+	for row in db.select("SELECT * FROM clones"):
+		path = Path(row['path'])
+		if path.exists():
+			path = path.resolve()
+			if str(path) != row['path']:
+				db.update("UPDATE clones SET path = ? WHERE repospec = ?", str(path), row['repospec'])
+
 def savepointNameGenerator():
 	i = 1
 	while True:

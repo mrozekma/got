@@ -880,12 +880,13 @@ class Tests(TestCase):
 		if useKeyring:
 			keyring.set_password('host1', 'user1', 'pass1')
 			keyring.set_password('host2', 'user2', 'pass2')
+		repo1, repo2 = Path('repo1').resolve(), Path('repo2').resolve()
+		repo1.mkdir()
+		repo2.mkdir()
 		Path('clones.json').write_text(toJS({
-			'host1:project/repo': 'repo1',
-			'host2:project/repo2@000000': 'repo2',
+			'host1:project/repo': str(repo1),
+			'host2:project/repo2@000000': str(repo2),
 		}))
-		Path('repo1').mkdir()
-		Path('repo2').mkdir()
 
 		expectedStdout = os.linesep.join([
 			'    Name *Type *URL',
@@ -904,9 +905,9 @@ class Tests(TestCase):
 			self.assertEqual({'hosts.json', 'credentials.json', 'clones.json'}, set(zip.namelist()))
 
 		with GotRun(['project/repo']) as r:
-			r.assertStdoutMatches('repo1')
+			r.assertStdoutMatches(re.escape(str(repo1)))
 		with GotRun(['project/repo2@000000']) as r:
-			r.assertStdoutMatches('repo2')
+			r.assertStdoutMatches(re.escape(str(repo2)))
 		with GotRun(['project/repo2']) as r:
 			r.assertFails()
 

@@ -4,7 +4,7 @@ from contextlib import contextmanager
 import re
 
 HOST_PATTERN = '[a-zA-Z0-9_-]+'
-REPOSPEC_PATTERN = re.compile(f'^(?:({HOST_PATTERN}):)?([a-zA-Z0-9_/.-]+)(?:@([0-9a-fA-F]{{6,40}}))?$')
+REPOSPEC_PATTERN = re.compile(f'^(?:({HOST_PATTERN}):)?([a-zA-Z0-9_/.-]+)(?:@([^~^: ]+))?$')
 
 class RepoSpec:
 	def __init__(self, name: str, revision: str = None, host: str = None):

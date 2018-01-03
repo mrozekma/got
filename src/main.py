@@ -1,6 +1,6 @@
 import argparse
 from getpass import getpass
-import git
+import git, gitdb
 import json
 import os
 from pathlib import Path
@@ -220,8 +220,11 @@ def where(repo: RepoSpec, format: str, on_uncloned: str, ensure_on_disk: bool = 
 
 		if repo.revision is not None:
 			r = git.Repo(str(localPath))
-			r.head.reference = r.commit(repo.revision)
-			r.head.reset(index = True, working_tree = True)
+			try:
+				r.head.reference = r.commit(repo.revision)
+				r.head.reset(index = True, working_tree = True)
+			except gitdb.exc.BadName:
+				r.git.checkout(repo.revision)
 
 		clone = Clone(repo, localPath)
 		clone.save()

@@ -676,6 +676,19 @@ def run(repos: Iterable[Iterable[RepoSpec]], cmd: List[str], bg: bool, ignore_er
 	# Wait for every process to exit. Then exit with the number of processes that failed
 	exit(sum(proc.wait() != 0 for proc in procs))
 
+def showVersion() -> None:
+	r = git.Repo(Path(__file__).resolve().parent.parent)
+	hash = r.git.describe(tags = True, long = True, dirty = True, always = True)
+	print(f"got {hash}")
+
+	if verbose(1):
+		print()
+		print(f"Database version: {next(db.select('PRAGMA user_version'))['user_version']}")
+		if verbose(2):
+			# Surprisingly hard to determine on Windows
+			print(f"User home: {Path.home()}")
+		print(f"Root: {gotRoot}{' (from environment)' if 'GOT_ROOT' in os.environ else ''}")
+
 def worktree(dir: Optional[str], temp: bool, with_repos: Optional[List[str]]):
 	dir = Path(dir or tempfile.mkdtemp(prefix = 'got_worktree_')).resolve()
 	if dir.exists():
@@ -833,6 +846,8 @@ runParser.add_argument('repos', nargs = '+', type = type_multipart_repospec)
 runParser.add_argument('--bg', action = 'store_true', help = 'run command in the background on each repository in parallel')
 runParser.add_argument('-i', '--ignore-errors', action = 'store_true', help = "don't stop if a command fails")
 runParser.add_argument('-x', '--cmd', required = True, nargs = argparse.REMAINDER, help = 'command to run')
+
+versionParser = makeMode('version', showVersion, 'show version information')
 
 if 'GOT_WORKTREE' not in os.environ:
 	worktreeParser = makeMode('worktree', worktree, 'make a new shell with an isolated got root')

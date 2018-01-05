@@ -189,23 +189,62 @@ class Tests(TestCase):
 
 	def test_hosts_none_plain(self):
 		with GotRun(['--hosts']) as r:
-			r.assertStdoutMatches(' *Name *Type *URL$')
+			r.assertStdoutMatches('No hosts configured')
 
 	def test_hosts_plain(self):
 		hostData = self.addBitbucketHost('bitbucket')
 		for i in (1, 2, 3):
 			self.addHost('daemon', f"fake{i}", f"http://fake{i}", f"fake{i}", "pw", force = True)
 		self.addHost('bitbucket', 'fake-bitbucket', 'http://example.com', 'fake', 'pw', force = True)
-		expectedStdout = os.linesep.join([
-			'    Name *Type *URL',
-			f"    bitbucket *bitbucket *{hostData['url']}",
-			r'\(!\) fake-bitbucket *bitbucket *http://example.com',
-			'    fake1 *daemon *http://fake1',
-			'    fake2 *daemon *http://fake2',
-			'    fake3 *daemon *http://fake3',
-		])
+		expectedStdout = f"""
+          Name: bitbucket
+          Type: bitbucket
+           URL: {hostData['url']}
+      Username: {hostData.get('username', '')}
+  SSH key path: {hostData.get('sshKey', '')}
+     Clone URL: {hostData.get('cloneUrl', '')}
+    Clone root: {hostData['cloneRoot'] if 'cloneRoot' in hostData else '<global> ' + str(Path('repos').resolve() / 'bitbucket')}
+  Total clones: 0
+
+          Name: fake-bitbucket
+          Type: bitbucket
+           URL: http://example.com
+      Username: fake
+  SSH key path: None
+     Clone URL: None
+    Clone root: <global> {str(Path('repos').resolve() / 'fake-bitbucket')}
+  Total clones: 0
+        Status: Disconnected (Unable to connect to Bitbucket)
+
+          Name: fake1
+          Type: daemon
+           URL: http://fake1
+      Username: fake1
+  SSH key path: None
+     Clone URL: None
+    Clone root: <global> {str(Path('repos').resolve() / 'fake1')}
+  Total clones: 0
+
+          Name: fake2
+          Type: daemon
+           URL: http://fake2
+      Username: fake2
+  SSH key path: None
+     Clone URL: None
+    Clone root: <global> {str(Path('repos').resolve() / 'fake2')}
+  Total clones: 0
+
+          Name: fake3
+          Type: daemon
+           URL: http://fake3
+      Username: fake3
+  SSH key path: None
+     Clone URL: None
+    Clone root: <global> {str(Path('repos').resolve() / 'fake3')}
+  Total clones: 0
+		"""
 		with GotRun(['--hosts']) as r:
-			r.assertStdoutMatches(expectedStdout + '$')
+			self.assertEqual(r.stdout.strip(), expectedStdout.strip())
 
 	def test_hosts_none_json(self):
 		with GotRun(['--hosts', '--format=json']) as r:
@@ -223,23 +262,48 @@ class Tests(TestCase):
 				'bitbucket': {
 					'type': 'bitbucket',
 					'url': hostData['url'],
+					'username': hostData.get('username', ''),
+					'ssh_key_path': hostData.get('sshKey', None),
+					'clone_url': hostData.get('cloneUrl', None),
+					'clone_root': hostData.get('cloneRoot', None),
+					'effective_clone_root': str(Path('repos').resolve() / 'bitbucket'),
 					# 'valid': True, #TODO Plan to add this field later
 				},
 				'fake1': {
 					'type': 'daemon',
 					'url': 'http://fake1',
+					'username': 'fake1',
+					'ssh_key_path': None,
+					'clone_url': None,
+					'clone_root': None,
+					'effective_clone_root': str(Path('repos').resolve() / 'fake1'),
 				},
 				'fake2': {
 					'type': 'daemon',
 					'url': 'http://fake2',
+					'username': 'fake2',
+					'ssh_key_path': None,
+					'clone_url': None,
+					'clone_root': None,
+					'effective_clone_root': str(Path('repos').resolve() / 'fake2'),
 				},
 				'fake3': {
 					'type': 'daemon',
 					'url': 'http://fake3',
+					'username': 'fake3',
+					'ssh_key_path': None,
+					'clone_url': None,
+					'clone_root': None,
+					'effective_clone_root': str(Path('repos').resolve() / 'fake3'),
 				},
 				'fake-bitbucket': {
 					'type': 'bitbucket',
 					'url': 'http://example.com',
+					'username': 'fake',
+					'ssh_key_path': None,
+					'clone_url': None,
+					'clone_root': None,
+					'effective_clone_root': str(Path('repos').resolve() / 'fake-bitbucket'),
 					# 'valid': False,
 				},
 			})
@@ -913,14 +977,16 @@ class Tests(TestCase):
 			'host2:project/repo2@000000': str(repo2),
 		}))
 
-		expectedStdout = os.linesep.join([
-			'    Name *Type *URL',
-			r'\(!\) host1 *bitbucket *http://bad-host/one',
-			'    host2 *daemon *http://bad-host/two',
-		])
-		with GotRun(['--hosts']) as r:
+		with GotRun(['--hosts', '--format', 'json']) as r:
 			r.assertInStderr('Imported old JSON database')
-			r.assertStdoutMatches(expectedStdout + '$')
+			data = fromJS(r.stdout)
+			self.assertEqual(set(data), {'host1', 'host2'})
+			self.assertEqual(data['host1']['type'], 'bitbucket')
+			self.assertEqual(data['host1']['url'], 'http://bad-host/one')
+			self.assertEqual(data['host1']['username'], 'user1')
+			self.assertEqual(data['host2']['type'], 'daemon')
+			self.assertEqual(data['host2']['url'], 'http://bad-host/two')
+			self.assertEqual(data['host2']['username'], 'user2')
 
 		self.assertFalse(Path('hosts.json').exists())
 		self.assertFalse(Path('credentials.json').exists())

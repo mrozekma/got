@@ -87,12 +87,19 @@ def type_multipart_repospec(spec: str) -> Iterable[RepoSpec]:
 		repo = RepoSpec.fromStr(project)
 		if repo.host:
 			try:
-				hosts = [Host.load(name = repo.host, type = 'bitbucket')]
+				host = Host.load(name = repo.host, type = 'bitbucket')
 			except ValueError:
 				raise argparse.ArgumentTypeError(f"Invalid multipart repospec: no Bitbucket host named `{repo.host}'")
+			# host.getReposInProject() failing is fatal since the host was specified by the user
+			specs = [f"{host.name}:{project}/{reponame}" for reponame in host.getReposInProject(project)]
 		else:
-			hosts = Host.loadAll(type = 'bitbucket')
-		specs = [f"{host.name}:{project}/{reponame}" for host in hosts for reponame in host.getReposInProject(project)]
+			specs = []
+			for host in Host.loadAll(type = 'bitbucket'):
+				try:
+					specs += [f"{host.name}:{project}/{reponame}" for reponame in host.getReposInProject(project)]
+				except Exception:
+					# host.getReposInProject() failing is ignored since the user didn't specify a particular host
+					pass
 	# 'spec+' means the spec and its dependencies
 	elif spec.endswith('+'):
 		return [clone.repospec for clone in iterDeps(type_repospec(spec[:-1]))]
@@ -362,16 +369,27 @@ def whence(repo: RepoSpec, format: str) -> Union[URL, JSON]:
 
 def showHosts(format: str) -> None:
 	if format == 'plain':
-		print(f"    {'Name':30} {'Type':20} URL")
-		for host in Host.loadAll(sort = 'name ASC'):
-			try:
-				host.check()
-				valid = True
-			except:
-				valid = False
-			print(f"{'   ' if valid else '(!)'} {host.name:30} {host.type:20} {host.url}")
+		hosts = Host.loadAll(sort = 'name ASC')
+		if hosts:
+			for host in hosts:
+				clones = Clone.loadAll(repospec = Like(host.name.replace('\\', '\\\\').replace('%', '\\%') + ':%'))
+				print(f"          Name: {host.name}")
+				print(f"          Type: {host.type}")
+				print(f"           URL: {host.url}")
+				print(f"      Username: {host.username}")
+				print(f"  SSH key path: {host.ssh_key_path}")
+				print(f"     Clone URL: {host.clone_url}")
+				print(f"    Clone root: {'<global> ' if host.clone_root is None else ''}{host.getEffectiveCloneRoot()}")
+				print(f"  Total clones: {sum(1 for _ in clones)}")
+				try:
+					host.check()
+				except Exception as e:
+					print(f"        Status: Disconnected ({e})")
+				print()
+		else:
+			print("No hosts configured")
 	elif format == 'json':
-		print(json.dumps({host.name: {'type': host.type, 'url': host.url} for host in Host.loadAll()}))
+		print(json.dumps({host.name: dict({k: getattr(host, k) for k in ('type', 'url', 'username', 'ssh_key_path', 'clone_url', 'clone_root')}, **{'effective_clone_root': str(host.getEffectiveCloneRoot())}) for host in Host.loadAll()}))
 
 def addHost(name: str, url: str, type: str, username: str, password: str, ssh_key: Optional[str], clone_url: Optional[str], clone_root: Optional[str], force: bool) -> None:
 	host = Host(name, type, url, username, ssh_key, clone_url, clone_root)

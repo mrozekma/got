@@ -364,8 +364,14 @@ List hosts
 List all registered hosts with ``--hosts``::
 
    $ got --hosts
-   Name                           Type                 URL
-   my-bitbucket                   bitbucket            http://localhost:7990/
+             Name: my-bitbucket
+             Type: bitbucket
+              URL: http://localhost:7990/
+         Username: user
+     SSH key path: None
+        Clone URL: None
+       Clone root: <global> ~/.got/repos/my-bitbucket
+     Total clones: 0
 
 .. _add-host:
 
@@ -394,8 +400,14 @@ Argument                  Type       Description
    Password: 
    Added bitbucket host bitbucket at http://localhost:7990/
    $ got --hosts
-   Name                           Type                 URL
-   my-bitbucket                   bitbucket            http://localhost:7990/
+             Name: my-bitbucket
+             Type: bitbucket
+              URL: http://localhost:7990/
+         Username: user
+     SSH key path: None
+        Clone URL: None
+       Clone root: <global> ~/.got/repos/my-bitbucket
+     Total clones: 0
 
 There are multiple authentication options depending on the host configuration:
 
@@ -437,7 +449,7 @@ Remove a host with ``--rm-host``. It takes a single argument, the name of the ho
 
    $ got --rm-host my-bitbucket
    $ got --hosts
-   Name                           Type                 URL
+   No hosts configured
 
 .. _config:
 

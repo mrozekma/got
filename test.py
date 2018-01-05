@@ -340,7 +340,7 @@ class Tests(TestCase):
 			self.assertTrue(cloneRoot in clonePath.parents, f"{cloneRoot} is not a parent of {clonePath}")
 
 		# After changing host clone_root
-		with GotRun(['--edit-host', 'bitbucket', '--new-clone-root', 'foobar']):
+		with GotRun(['--edit-host', 'bitbucket', '--set-clone-root', 'foobar']):
 			pass
 		cloneRoot = Path('foobar').resolve()
 		with GotRun([repospec2]) as r:
@@ -349,12 +349,12 @@ class Tests(TestCase):
 
 	def test_edit_host_new_url(self):
 		self.addBitbucketHost('bitbucket')
-		with GotRun(['--edit-host', 'bitbucket', '--new-url', 'http://example.com', '--force']) as r:
+		with GotRun(['--edit-host', 'bitbucket', '--set-url', 'http://example.com', '--force']) as r:
 			r.assertInStdout('New URL: http://example.com')
 
 	def test_edit_host_new_username(self):
 		hostData = self.addBitbucketHost('bitbucket')
-		with GotRun(['--edit-host', 'bitbucket', '--new-username', hostData.get('username', 'username') + '_test', '--force']) as r:
+		with GotRun(['--edit-host', 'bitbucket', '--set-username', hostData.get('username', 'username') + '_test', '--force']) as r:
 			r.assertInStdout(f"New username: {hostData.get('username', 'username') + '_test'}")
 
 	def test_edit_host_new_password(self):
@@ -363,13 +363,13 @@ class Tests(TestCase):
 			self.skipTest("No username/password auth data")
 		# Also changing username to avoid captcha problems
 		# I'm assuming the current password is not 'pw'. Hopefully
-		with GotRun(['--edit-host', 'bitbucket', '--new-username', hostData['username'] + '_test', '--new-password', 'pw', '--force']) as r:
+		with GotRun(['--edit-host', 'bitbucket', '--set-username', hostData['username'] + '_test', '--set-password', 'pw', '--force']) as r:
 			r.assertInStdout(f"New username: {hostData['username'] + '_test'}")
 			r.assertInStdout(f"New password:")
 
 	def test_edit_host_new_clone_root(self):
 		hostData = self.addBitbucketHost('bitbucket')
-		with GotRun(['--edit-host', 'bitbucket', '--new-clone-root', 'dir', '--force']) as r:
+		with GotRun(['--edit-host', 'bitbucket', '--set-clone-root', 'dir', '--force']) as r:
 			r.assertInStdout(f"New clone root: dir")
 
 	def test_rm_host(self):

@@ -436,9 +436,9 @@ Placeholder   Description
 Edit host
 ~~~~~~~~~
 
-Edit an existing host with ``--edit-host``. The arguments are similar to :ref:`--add-host <add-host>`; ``name`` is mandatory to specify the host, and ``--force`` optionally forces the edit even if unable to connect, just as when adding a host. ``--new-url``, ``--new-username``, ``--new-password``, ``--new-ssh-key``, ``--new-clone-url``, and ``--new-clone-root`` all modify the corresponding fields.
+Edit an existing host with ``--edit-host``. The arguments are similar to :ref:`--add-host <add-host>`; ``name`` is mandatory to specify the host, and ``--force`` optionally forces the edit even if unable to connect, just as when adding a host. ``--set-url``, ``--set-username``, ``--set-password``, ``--set-ssh-key``, ``--set-clone-url``, and ``--set-clone-root`` all modify the corresponding fields.
 
-The options ``--new-url``, ``--new-ssh-key``, and ``--new-clone-url`` require special care because they can change what URL clones expect to originate from. If you have existing clones from this host that need to be updated, use ``--update-clones`` to recompute their origin URLs and update the repository remotes.
+The options ``--set-url``, ``--set-ssh-key``, and ``--set-clone-url`` require special care because they can change what URL clones expect to originate from. If you have existing clones from this host that need to be updated, use ``--update-clones`` to recompute their origin URLs and update the repository remotes.
 
 .. _rm-host:
 

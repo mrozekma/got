@@ -417,46 +417,46 @@ def addHost(name: str, url: str, type: str, username: str, password: str, ssh_ke
 			host.save()
 	print(f"Added {type} host {name} at {url}")
 
-def editHost(name: str, new_url: Optional[str], new_username: Optional[str], new_password: Optional[str], new_ssh_key: Optional[str], new_clone_url: Optional[str], new_clone_root: Optional[str], update_clones: bool, force: bool) -> None:
+def editHost(name: str, set_url: Optional[str], set_username: Optional[str], set_password: Optional[str], set_ssh_key: Optional[str], set_clone_url: Optional[str], set_clone_root: Optional[str], update_clones: bool, force: bool) -> None:
 	host = Host.load(name = name, err = f"No host named {name}")
 	print(f"Editing host: {name}")
 
-	if new_password == '-':
-		new_password = getpass()
+	if set_password == '-':
+		set_password = getpass()
 
 	with host.lock():
 		with db.transaction():
-			if new_url is not None:
-				host.url = new_url
-				print(f"  New URL: {new_url}")
-			if new_username is not None:
+			if set_url is not None:
+				host.url = set_url
+				print(f"  New URL: {set_url}")
+			if set_username is not None:
 				# The username is stored in both the hosts table and the keyring, so we need to delete the credential and make a new one, but first we need to pull the password out of the keyring so we can put it back with the new username
 				cred = host.getCredential()
 				if cred is not None:
 					cred.delete()
-					Credential(host.name, new_username, cred.password).save()
-				host.username = new_username
-				print(f"  New username: {new_username}")
-			if new_password is not None:
+					Credential(host.name, set_username, cred.password).save()
+				host.username = set_username
+				print(f"  New username: {set_username}")
+			if set_password is not None:
 				cred = host.getCredential()
 				if cred is None:
-					if new_password:
-						Credential(host.name, host.username, new_password).save()
-				elif new_password:
-					cred.password = new_password
+					if set_password:
+						Credential(host.name, host.username, set_password).save()
+				elif set_password:
+					cred.password = set_password
 					cred.save()
 				else:
 					cred.delete()
-				print(f"  New password: {'***' if new_password else '(none)'}")
-			if new_ssh_key is not None:
-				host.ssh_key_path = new_ssh_key
-				print(f"  New SSH key: {new_ssh_key}")
-			if new_clone_url is not None:
-				host.clone_url = new_clone_url
-				print(f"  New clone URL: {new_clone_url}")
-			if new_clone_root is not None:
-				host.clone_root = new_clone_root
-				print(f"  New clone root: {new_clone_root}")
+				print(f"  New password: {'***' if set_password else '(none)'}")
+			if set_ssh_key is not None:
+				host.ssh_key_path = set_ssh_key
+				print(f"  New SSH key: {set_ssh_key}")
+			if set_clone_url is not None:
+				host.clone_url = set_clone_url
+				print(f"  New clone URL: {set_clone_url}")
+			if set_clone_root is not None:
+				host.clone_root = set_clone_root
+				print(f"  New clone root: {set_clone_root}")
 				print("    Note: The clone root only applies to new clones -- no existing clones on disk will be moved")
 
 			try:
@@ -467,7 +467,7 @@ def editHost(name: str, new_url: Optional[str], new_username: Optional[str], new
 				else:
 					raise ConnectionError(f"Unable to edit host: {e}")
 
-			if update_clones and ((new_url is not None) or (new_ssh_key is not None) or (new_clone_url is not None)):
+			if update_clones and ((set_url is not None) or (set_ssh_key is not None) or (set_clone_url is not None)):
 				count = 0
 				print("Updating clones:")
 				for clone in Clone.loadAll(repospec = Like(f"{name}:%")):
@@ -804,12 +804,12 @@ addHostParser.add_argument('--force', action = 'store_true', help = 'add the hos
 
 editHostParser = makeMode('edit-host', editHost, 'edit a registered git host')
 editHostParser.add_argument('name', type = type_host_name)
-editHostParser.add_argument('--new-url', metavar = 'URL')
-editHostParser.add_argument('--new-username', metavar = 'USERNAME')
-editHostParser.add_argument('--new-password', nargs = '?', const = '-', metavar = 'PASSWORD')
-editHostParser.add_argument('--new-ssh-key', metavar = 'PEM')
-editHostParser.add_argument('--new-clone-url', metavar = 'URL')
-editHostParser.add_argument('--new-clone-root', metavar = 'PATH')
+editHostParser.add_argument('--set-url', metavar = 'URL')
+editHostParser.add_argument('--set-username', metavar = 'USERNAME')
+editHostParser.add_argument('--set-password', nargs = '?', const = '-', metavar = 'PASSWORD')
+editHostParser.add_argument('--set-ssh-key', metavar = 'PEM')
+editHostParser.add_argument('--set-clone-url', metavar = 'URL')
+editHostParser.add_argument('--set-clone-root', metavar = 'PATH')
 editHostParser.add_argument('--update-clones', action = 'store_true')
 editHostParser.add_argument('--force', action = 'store_true')
 

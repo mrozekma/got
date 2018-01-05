@@ -150,7 +150,7 @@ class GotRun:
 			self.fail("Wrong stderr; didn't match pattern")
 
 class Tests(TestCase):
-	def addHost(self, type, name, url, username = None, password = None, sshKey = None, cloneUrl = None, force = False, shouldWork = True):
+	def addHost(self, type, name, url, username = None, password = None, sshKey = None, cloneUrl = None, cloneRoot = None, force = False, shouldWork = True):
 		args = ['--add-host', '-t', type, name, url]
 		if username:
 			args += ['-u', username]
@@ -160,6 +160,8 @@ class Tests(TestCase):
 			args += ['-k', sshKey]
 		if cloneUrl:
 			args += ['--clone-url', cloneUrl]
+		if cloneRoot:
+			args += ['--clone-root', cloneRoot]
 		if force:
 			args.append('--force')
 
@@ -173,7 +175,7 @@ class Tests(TestCase):
 		data = allHostData['bitbucket']
 		if not (('username' in data and 'password' in data) or ('sshKey' in data and 'cloneUrl' in data)):
 			self.skipTest("Bitbucket host doesn't have auth data")
-		self.addHost('bitbucket', name, force = force, **{k: v for k, v in data.items() if k in ('url', 'username', 'password', 'sshKey', 'cloneUrl')})
+		self.addHost('bitbucket', name, force = force, **{k: v for k, v in data.items() if k in ('url', 'username', 'password', 'sshKey', 'cloneUrl', 'cloneRoot')})
 		return data
 
 	def assertRepoOriginatesFrom(self, repoPath, originUrl):
@@ -263,6 +265,24 @@ class Tests(TestCase):
 		self.addHost('bitbucket', 'host1', 'http://example.com', 'username', 'password', force = True)
 		self.addHost('bitbucket', 'host2', hostData['url'], hostData['username'] + '_neg_test', 'pw', force = True)
 
+	def test_host_clone_root(self):
+		hostData = self.addBitbucketHost('bitbucket')
+		repospec1, repospec2 = hostData['repospecs'][:2]
+
+		# Before changing host clone_root
+		cloneRoot = Path('repos').resolve() / 'bitbucket'
+		with GotRun([repospec1]) as r:
+			clonePath = Path(r.stdout.strip()).resolve()
+			self.assertTrue(cloneRoot in clonePath.parents, f"{cloneRoot} is not a parent of {clonePath}")
+
+		# After changing host clone_root
+		with GotRun(['--edit-host', 'bitbucket', '--new-clone-root', 'foobar']):
+			pass
+		cloneRoot = Path('foobar').resolve()
+		with GotRun([repospec2]) as r:
+			clonePath = Path(r.stdout.strip()).resolve()
+			self.assertTrue(cloneRoot in clonePath.parents, f"{cloneRoot} is not a parent of {clonePath}")
+
 	def test_edit_host_new_url(self):
 		self.addBitbucketHost('bitbucket')
 		with GotRun(['--edit-host', 'bitbucket', '--new-url', 'http://example.com', '--force']) as r:
@@ -282,6 +302,11 @@ class Tests(TestCase):
 		with GotRun(['--edit-host', 'bitbucket', '--new-username', hostData['username'] + '_test', '--new-password', 'pw', '--force']) as r:
 			r.assertInStdout(f"New username: {hostData['username'] + '_test'}")
 			r.assertInStdout(f"New password:")
+
+	def test_edit_host_new_clone_root(self):
+		hostData = self.addBitbucketHost('bitbucket')
+		with GotRun(['--edit-host', 'bitbucket', '--new-clone-root', 'dir', '--force']) as r:
+			r.assertInStdout(f"New clone root: dir")
 
 	def test_rm_host(self):
 		hostData = self.addBitbucketHost('bitbucket')

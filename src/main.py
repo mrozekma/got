@@ -168,7 +168,8 @@ def where(repo: RepoSpec, format: str, on_uncloned: str, ensure_on_disk: bool = 
 	elif on_uncloned == 'fail':
 		raise RuntimeError(f"No local clone of {repo}")
 	elif on_uncloned == 'fake':
-		return formatRtn(Clone(repo, Path(config.clone_root) / '__REPO_NOT_FOUND__'))
+		cloneRoot = repo.host.getEffectiveCloneRoot() if repo.host is not None else Path(config.clone_root)
+		return formatRtn(Clone(repo, cloneRoot / '__REPO_NOT_FOUND__'))
 
 	# If we don't have a matching clone, we need to find its host and clone it
 	host, url = findRepo(repo)
@@ -183,7 +184,7 @@ def where(repo: RepoSpec, format: str, on_uncloned: str, ensure_on_disk: bool = 
 		if rtn is not None:
 			return rtn
 
-		localPath = Path(dest) if dest else Path(config.clone_root) / host.name / (f"{repo.name}@{repo.revision}" if repo.revision is not None else repo.name)
+		localPath = Path(dest) if dest else host.getEffectiveCloneRoot() / (f"{repo.name}@{repo.revision}" if repo.revision is not None else repo.name)
 		if localPath.is_dir():
 			if verbose(1):
 				print(f"{localPath} already exists; switching to here mode")
@@ -372,8 +373,8 @@ def showHosts(format: str) -> None:
 	elif format == 'json':
 		print(json.dumps({host.name: {'type': host.type, 'url': host.url} for host in Host.loadAll()}))
 
-def addHost(name: str, url: str, type: str, username: str, password: str, ssh_key: Optional[str], clone_url: Optional[str], force: bool) -> None:
-	host = Host(name, type, url, username, ssh_key, clone_url)
+def addHost(name: str, url: str, type: str, username: str, password: str, ssh_key: Optional[str], clone_url: Optional[str], clone_root: Optional[str], force: bool) -> None:
+	host = Host(name, type, url, username, ssh_key, clone_url, clone_root)
 	with host.lock():
 		existingHost = Host.tryLoad(name = name)
 		if existingHost is not None:
@@ -398,7 +399,7 @@ def addHost(name: str, url: str, type: str, username: str, password: str, ssh_ke
 			host.save()
 	print(f"Added {type} host {name} at {url}")
 
-def editHost(name: str, new_url: Optional[str], new_username: Optional[str], new_password: Optional[str], new_ssh_key: Optional[str], new_clone_url: Optional[str], update_clones: bool, force: bool) -> None:
+def editHost(name: str, new_url: Optional[str], new_username: Optional[str], new_password: Optional[str], new_ssh_key: Optional[str], new_clone_url: Optional[str], new_clone_root: Optional[str], update_clones: bool, force: bool) -> None:
 	host = Host.load(name = name, err = f"No host named {name}")
 	print(f"Editing host: {name}")
 
@@ -435,6 +436,10 @@ def editHost(name: str, new_url: Optional[str], new_username: Optional[str], new
 			if new_clone_url is not None:
 				host.clone_url = new_clone_url
 				print(f"  New clone URL: {new_clone_url}")
+			if new_clone_root is not None:
+				host.clone_root = new_clone_root
+				print(f"  New clone root: {new_clone_root}")
+				print("    Note: The clone root only applies to new clones -- no existing clones on disk will be moved")
 
 			try:
 				host.check()
@@ -763,6 +768,7 @@ addHostParser.add_argument('-u', '--username', default = '', help = 'login usern
 addHostParser.add_argument('-p', '--password', nargs = '?', default = None, const = '-', help = "login password (empty or '-' to prompt)")
 addHostParser.add_argument('-k', '--ssh-key', metavar = 'PEM', help = "ssh public key PEM filename")
 addHostParser.add_argument('--clone-url', metavar = 'URL', help = "clone URL pattern")
+addHostParser.add_argument('--clone-root', metavar = 'PATH', help = "directory to store clones from this host")
 addHostParser.add_argument('--force', action = 'store_true', help = 'add the host even if a connection cannot be established')
 
 editHostParser = makeMode('edit-host', editHost, 'edit a registered git host')
@@ -772,6 +778,7 @@ editHostParser.add_argument('--new-username', metavar = 'USERNAME')
 editHostParser.add_argument('--new-password', nargs = '?', const = '-', metavar = 'PASSWORD')
 editHostParser.add_argument('--new-ssh-key', metavar = 'PEM')
 editHostParser.add_argument('--new-clone-url', metavar = 'URL')
+editHostParser.add_argument('--new-clone-root', metavar = 'PATH')
 editHostParser.add_argument('--update-clones', action = 'store_true')
 editHostParser.add_argument('--force', action = 'store_true')
 

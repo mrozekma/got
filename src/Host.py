@@ -2,10 +2,12 @@ import abc
 from contextlib import contextmanager
 import git
 import os
+from pathlib import Path
 import re
 import stashy
 
 from .Credential import Credential
+from .Config import config
 from .DB import db, ActiveRecord
 from .utils import makeGitEnvironment, Template
 
@@ -49,19 +51,33 @@ class Host(abc.ABC):
 
 # Concrete hosts don't subclass Host because __new__ interferes with their construction
 class SubclassableHost:
-	def __init__(self, name, url, username, ssh_key_path = None, clone_url = None):
+	def __init__(self, name, url, username, ssh_key_path = None, clone_url = None, clone_root = None):
 		self.type = self.getType()
 		self.name = name
 		self.url = url.rstrip('/')
 		self.username = username
 		self.ssh_key_path = ssh_key_path
 		self.clone_url = clone_url
+		self.clone_root = clone_root
 
 	# This doesn't implement setting the password because it would need to wait until the host's save() method is called. Changing the password should be done via the Credential interface directly
 	@property
 	def password(self):
 		cred = self.getCredential()
 		return cred.password if cred is not None else None
+
+	@property
+	def clone_root(self):
+		return self._clone_root
+
+	@clone_root.setter
+	def clone_root(self, clone_root):
+		if clone_root is None:
+			self._clone_root = None
+		else:
+			p = Path(clone_root)
+			p.mkdir(parents = True, exist_ok = True)
+			self._clone_root = str(p.resolve())
 
 	def getCredential(self):
 		try:
@@ -86,6 +102,9 @@ class SubclassableHost:
 			rs = repoName,
 		)
 
+	def getEffectiveCloneRoot(self):
+		return Path(self.clone_root) if self.clone_root is not None else (Path(config.clone_root) / self.name)
+
 	@abc.abstractmethod
 	def getType(self = None):
 		pass
@@ -98,9 +117,9 @@ class SubclassableHost:
 		pass
 
 class BitbucketHost(SubclassableHost, ActiveRecord):
-	def __init__(self, name, url, username, ssh_key_path = None, clone_url = None):
+	def __init__(self, name, url, username, ssh_key_path = None, clone_url = None, clone_root = None):
 		self._conn = None # Lazy loaded via self.conn property
-		super().__init__(name, url, username, ssh_key_path, clone_url)
+		super().__init__(name, url, username, ssh_key_path, clone_url, clone_root)
 
 	@property
 	def conn(self):
@@ -170,8 +189,8 @@ class BitbucketHost(SubclassableHost, ActiveRecord):
 			raise ConnectionError("Invalid/insufficient credentials")
 
 class DaemonHost(SubclassableHost, ActiveRecord):
-	def __init__(self, name, url, username, ssh_key_path = None, clone_url = None):
-		super().__init__(name, url, username, ssh_key_path, clone_url)
+	def __init__(self, name, url, username, ssh_key_path = None, clone_url = None, clone_root = None):
+		super().__init__(name, url, username, ssh_key_path, clone_url, clone_root)
 
 	def getType(self = None):
 		return 'daemon'

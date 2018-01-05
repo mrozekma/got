@@ -91,6 +91,12 @@ def v2(db):
 			if str(path) != row['path']:
 				db.update("UPDATE clones SET path = ? WHERE repospec = ?", str(path), row['repospec'])
 
+@schemaUpdate
+def v3(db):
+	# Add clone_root column to the host tables
+	db.update("ALTER TABLE bitbucket_hosts ADD clone_root text");
+	db.update("ALTER TABLE daemon_hosts ADD clone_root text");
+
 def savepointNameGenerator():
 	i = 1
 	while True:

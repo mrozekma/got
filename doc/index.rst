@@ -384,6 +384,7 @@ Argument                  Type       Description
 ``--password [PASSWORD]`` Optional   Account password. Optional if no authentication is required or you're using an SSH key. Use ``--password`` with no password to be prompted for one on stdin
 ``--ssh-key PEM_FILE``    Optional   Path to SSH private key. Optional if no authentication is required or you're using a password
 ``--clone-url URL``       Optional   Pattern to use to figure out a clone URL for a given repospec
+``--clone-root PATH``     Optional   Directory to store new clones in. By default this is a subdirectory of the :ref:`global clone root <configuration>`, named the same as the host
 ``--force``               Optional   Add the host even if unable to connect to it
 ========================= ========== ======================================================
 
@@ -423,7 +424,7 @@ Placeholder   Description
 Edit host
 ~~~~~~~~~
 
-Edit an existing host with ``--edit-host``. The arguments are similar to :ref:`--add-host <add-host>`; ``name`` is mandatory to specify the host, and ``--force`` optionally forces the edit even if unable to connect, just as when adding a host. ``--new-url``, ``--new-username``, ``--new-password``, ``--new-ssh-key``, and ``--new-clone-url`` all modify the corresponding fields.
+Edit an existing host with ``--edit-host``. The arguments are similar to :ref:`--add-host <add-host>`; ``name`` is mandatory to specify the host, and ``--force`` optionally forces the edit even if unable to connect, just as when adding a host. ``--new-url``, ``--new-username``, ``--new-password``, ``--new-ssh-key``, ``--new-clone-url``, and ``--new-clone-root`` all modify the corresponding fields.
 
 The options ``--new-url``, ``--new-ssh-key``, and ``--new-clone-url`` require special care because they can change what URL clones expect to originate from. If you have existing clones from this host that need to be updated, use ``--update-clones`` to recompute their origin URLs and update the repository remotes.
 

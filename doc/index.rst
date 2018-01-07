@@ -176,41 +176,6 @@ Recording requests
 
 To keep a log of all where mode requests, set the environment variable ``GOT_WHERE_LOG``. Got will append requested repospecs to this file as they occur. This can be useful for generating a :ref:`dependency file <dependencies>` for a repository, by building that repository with where logging enabled.
 
-.. _mv:
-
-Move a local repository
-~~~~~~~~~~~~~~~~~~~~~~~
-
-Relocate an existing clone on disk with ``--mv``. It takes two arguments, the :ref:`repospec <repospec>` of the repository to move and the target path::
-
-   $ got --mv project/repo ~/new-path
-   Moved my-bitbucket:project/repo to ~/new-path
-
-.. _here:
-
-Record/forget a local repository
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-If you already have a repository cloned on disk, register it with ``--here``. The arguments are a :ref:`repospec <repospec>` and the path to the clone::
-
-   $ got --here my-bitbucket:project/repo ~/my-manual-clone
-   my-bitbucket:project/repo is located at ~/my-manual-clone
-
-If the host is omitted from the repospec, it will be deduced from the origin URL of the target clone::
-
-   $ got --here project/repo ~/my-manual-clone
-   No host specified -- searching for one with clone URL http://user@localhost:7990/scm/project/repo.git
-   Deduced host my-bitbucket
-   my-bitbucket:project/repo is located at ~/my-manual-clone
-
-Set the path to ``-`` to unregister it from Got. This does not delete the actual clone.
-
-::
-
-   $ got --here my-bitbucket:project/repo -
-   my-bitbucket:project/repo no longer has a registered local clone
-   (old path still exists on disk: ~/.got/repos/my-bitbucket/project/repo)
-
 .. _whence:
 
 Find a remote repository
@@ -349,10 +314,78 @@ For example::
 
 Got will exit 0 if all invocations were successful. If an invocation failed in foreground mode, Got exits 1 immediately. Otherwise Got will finish the other invocations and exit with the total number that failed. Note that Got will exit non-zero on invocation failure even with ``--ignore-errors`` -- this flag is just to prevent bailing out early.
 
+Synchronize clone database with repositories on disk
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Got's database can get out of sync with your local disk if you clone a repository directly from git, or move or delete a repository that's registered with Got.
+
+.. _here:
+
+Record/forget a local repository
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+If you already have a repository cloned on disk, register it with ``--here``. The arguments are a :ref:`repospec <repospec>` and the path to the clone::
+
+   $ got --here my-bitbucket:project/repo ~/my-manual-clone
+   my-bitbucket:project/repo is located at ~/my-manual-clone
+
+If the host is omitted from the repospec, it will be deduced from the origin URL of the target clone::
+
+   $ got --here project/repo ~/my-manual-clone
+   No host specified -- searching for one with clone URL http://user@localhost:7990/scm/project/repo.git
+   Deduced host my-bitbucket
+   my-bitbucket:project/repo is located at ~/my-manual-clone
+
+Set the path to ``-`` to unregister it from Got. This does not delete the actual clone.
+
+::
+
+   $ got --here my-bitbucket:project/repo -
+   my-bitbucket:project/repo no longer has a registered local clone
+   (old path still exists on disk: ~/.got/repos/my-bitbucket/project/repo)
+
+.. _mv:
+
+Move a local repository
+^^^^^^^^^^^^^^^^^^^^^^^
+
+Relocate an existing clone on disk with ``--mv``. It takes two arguments, the :ref:`repospec <repospec>` of the repository to move and the target path::
+
+   $ got --mv project/repo ~/new-path
+   Moved my-bitbucket:project/repo to ~/new-path
+
+.. _scan:
+
+Register unknown repositories
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Scan the filesystem for clones Got doesn't know about with ``--scan``. Scan mode takes one or more directories as arguments. Each listed directory is scanned recursively to locate git repositories, and Got attempts to deduce what repospec corresponds to the repository. Repositories with deducible repospecs that aren't already registered with Got are registered automatically. There is one optional argument, ``-i`` (or ``--interactive``), which prompts to register each discovered clone.
+
+Note that only hosts with manually-specified clone URL patterns can be utilized by scan mode. You can check which hosts have specified clone URLs with :ref:`--hosts <hosts>`. Scan mode will list all supported hosts before it starts scanning.
+
+For example::
+
+   $ got project/repo project/repo2
+   ~/.got/repos/host/project/repo
+   ~/.got/repos/host/project/repo2
+
+   $ got --here project/repo -
+   my-bitbucket:project/repo no longer has a registered local clone
+   (old path still exists on disk: ~/.got/repos/host/project/repo)
+
+   $ got --scan ~/.got/repos
+   Only the following hosts with clone URL patterns will be searched: my-bitbucket
+   Scanning... (this may take some time)
+   Processing 2 repositories
+
+   ~/.got/repos/host/project/repo: registered as my-bitbucket:project/repo
+   ~/.got/repos/host/project/repo2: already registered as my-bitbucket:project/repo2
+
+   Scan complete. Added 1 clone
+
 .. _prune:
 
 Cleanup removed repositories
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Scan the filesystem for clones that no longer exist with ``--prune``. Like :ref:`here mode <here>` with a path of `-`, this unregisters clones so that future lookups will make a fresh clone. In the case of ``--prune``, every clone is checked to see if it still exists on disk, and all missing clones are removed. There is one optional argument, ``-i`` (or ``--interactive``), which prompts to unregister each missing clone.
 

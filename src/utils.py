@@ -54,16 +54,32 @@ def makeGitEnvironment(host: 'Host') -> Dict[str, str]:
 		rtn['GIT_SSH_COMMAND'] = f'ssh -i "{host.ssh_key_path}"'
 	return rtn
 
+
+class VerboseBlock:
+	def __init__(self, set):
+		self.set = set
+
+	def __enter__(self):
+		global verbosity
+		self.old, verbosity = verbosity, self.set
+
+	def __exit__(self, exc_type, exc_val, exc_tb):
+		global verbosity
+		verbosity = self.old
+
 verbosity = 1
-def verbose(lvl: int = None, *, set: int = None) -> Union[int, bool]:
+def verbose(lvl: int = None, *, set: int = None, temp: int = None) -> Union[int, bool, VerboseBlock]:
 	'''
 	verbose() returns the current level
 	verbose(lvl) returns True if the current level is at least 'lvl'
 	verbose(set = lvl) sets the current level to 'lvl'
+	with verbose(temp = lvl) sets the current level to 'lvl' until the with-block ends
 	'''
 	if set is not None:
 		global verbosity
 		verbosity = set
+	if temp is not None:
+		return VerboseBlock(temp)
 	if lvl is not None:
 		return verbosity >= lvl
 	return verbosity

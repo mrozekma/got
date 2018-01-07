@@ -1,6 +1,7 @@
 import argparse
 from getpass import getpass
 import git, gitdb
+import itertools
 import json
 import os
 from pathlib import Path
@@ -334,7 +335,8 @@ def here(repo: RepoSpec, dir: str, force: bool) -> Optional[Clone]:
 
 		rtn = Clone(repo, dir)
 		rtn.save()
-		print(f"{repo} is located at {dir}")
+		if verbose(1):
+			print(f"{repo} is located at {dir}")
 		return rtn
 
 def what(dir: Optional[str]) -> Optional[RepoSpec]:
@@ -649,6 +651,72 @@ def prune(interactive: bool) -> None:
 				print(f"Removed {clone.repospec} (missing clone {clone.path})")
 	print(f"Removed {removed}, kept {total - removed}")
 
+def scan(dirs: Iterable[str], interactive: bool) -> None:
+	dirs = [Path(dir) for dir in dirs]
+	missing = [dir for dir in dirs if not dir.exists()]
+	if missing:
+		raise ValueError(f"{'Directory' if len(missing) == 1 else 'Directories'} not found: {' '.join(map(str, missing))}")
+
+	hosts = {host: host.makeCloneRE() for host in Host.loadAll() if host.clone_url is not None}
+	if hosts:
+		print(f"Only the following hosts with clone URL patterns will be searched: {', '.join(host.name for host in hosts)}")
+	else:
+		raise RuntimeError("Only hosts with clone URL patterns can be searched; none found")
+
+	# Do the entire scan up-front so interactive mode is less annoying
+	print("Scanning... (this make take some time)", flush = True)
+	candidates = list(itertools.chain.from_iterable(dir.glob('**/.git') for dir in dirs))
+	print(f"Processing {len(candidates)} {'repository' if len(candidates) == 1 else 'repositories'}")
+	print()
+
+	added = 0
+	for candidate in candidates:
+		repoRoot = candidate.parent
+		print(repoRoot, end = ': ', flush = True)
+		try:
+			clone = Clone.load(path = repoRoot)
+			print(f"already registered as {clone.repospec}")
+			continue
+		except ValueError:
+			pass
+
+		try:
+			r = git.Repo(repoRoot)
+			url = r.remotes['origin'].url
+		except git.exc.InvalidGitRepositoryError:
+			print('invalid git repository')
+			continue
+		except IndexError:
+			print('no origin remote')
+			continue
+		except Exception as e:
+			print(f"failed to open repository: {e}")
+			continue
+
+		for host, pattern in hosts.items():
+			match = pattern.match(url)
+			if match is not None:
+				rs = RepoSpec.fromStr(match.groupdict()['rs'])
+				if rs.host is None:
+					rs.host = host.name
+				# Revision pinning is impossible to reconstruct in all cases, but by default the revision is in the directory name, so at least handle that case
+				if '@' in repoRoot.name:
+					rs.revision = repoRoot.name[repoRoot.name.index('@') + 1:]
+
+				if interactive and input(f"{repoRoot}: register as {rs}? ").lower() not in ('y', 'yes'):
+					break
+				with verbose(temp = 0):
+					here(rs, repoRoot, False)
+				if not interactive:
+					print(f"registered as {rs}")
+				added += 1
+				break
+		else:
+			print('not provided by any host')
+
+	print()
+	print(f"Scan complete. Added {added} {'clone' if added == 1 else 'clones'}")
+
 def run(repos: Iterable[Iterable[RepoSpec]], cmd: List[str], bg: bool, ignore_errors: bool):
 	env = dict(os.environ)
 	procs = []
@@ -840,6 +908,10 @@ findRootParser.add_argument('dir', nargs = '?', default = str(Path.cwd()), help 
 
 pruneParser = makeMode('prune', prune, 'unregister clones that no longer exist on disk')
 pruneParser.add_argument('-i', '--interactive', action = 'store_true', help = 'prompt before unregistering missing clones')
+
+scanParser = makeMode('scan', scan, 'find unrecognized directories in the clone root and register them')
+scanParser.add_argument('-i', '--interactive', action = 'store_true', help = 'prompt before registering discovered clones')
+scanParser.add_argument('dirs', nargs = '+', help = 'directories to scan')
 
 runParser = makeMode('run', run, 'run an arbitrary command on the specified repositories')
 runParser.add_argument('repos', nargs = '+', type = type_multipart_repospec)

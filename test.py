@@ -942,7 +942,24 @@ class Tests(TestCase):
 		with GotRun(['--prune']) as r:
 			r.assertInStdout('Removed 0, kept 1')
 
-	#TODO Test --prune --interactive? No ability to control stdin yet
+	def test_scan(self):
+		hostData = self.addBitbucketHost('bitbucket')
+		repospecs = hostData['repospecs'][:5]
+		# Clone all the repos
+		with GotRun(repospecs):
+			pass
+		# Unregister two
+		for repospec in repospecs[:2]:
+			with GotRun(['--here', repospec, '-']):
+				pass
+		# Scan
+		with GotRun(['--scan', '.']) as r:
+			r.assertInStdout(f"Processing {len(repospecs)} repositories")
+			for repospec in repospecs[:2]:
+				r.assertInStdout(f"repos/bitbucket/{repospec}: registered as bitbucket:{repospec}")
+			r.assertInStdout("Scan complete. Added 2 clones")
+
+	#TODO Test {--prune,--scan} --interactive? No ability to control stdin yet
 
 	def test_db_v0_to_v1(self):
 		Path('hosts.json').write_text(toJS({

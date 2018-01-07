@@ -102,6 +102,18 @@ class SubclassableHost:
 			rs = repoName,
 		)
 
+	def makeCloneRE(self):
+		if self.clone_url is None:
+			raise RuntimeError(f"Host {self.name} has no clone URL pattern; cannot make a reverse clone regex")
+		# First, escape the pattern so it can be used in a regex
+		pattern = re.escape(self.clone_url)
+		# But don't escape the template substitution character
+		pattern = pattern.replace(rf'\{Template.delimiter}', Template.delimiter)
+		# Now replace '%username' with the host username, and '%rs' with a named capture group
+		pattern = Template(pattern).substitute(username = self.username, rs = '(?P<rs>.*)')
+		# And compile it
+		return re.compile(pattern)
+
 	def getEffectiveCloneRoot(self):
 		return Path(self.clone_root) if self.clone_root is not None else (Path(config.clone_root) / self.name)
 

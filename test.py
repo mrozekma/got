@@ -244,7 +244,7 @@ class Tests(TestCase):
   Total clones: 0
 		"""
 		with GotRun(['--hosts']) as r:
-			self.assertEqual(r.stdout.strip(), expectedStdout.strip())
+			self.assertEqual(r.stdout.strip().split(os.linesep), expectedStdout.strip().split('\n'))
 
 	def test_hosts_none_json(self):
 		with GotRun(['--hosts', '--format=json']) as r:
@@ -393,7 +393,7 @@ class Tests(TestCase):
 	def test_clones(self):
 		numClones = len(self.git_helper())
 		with GotRun(['--clones']) as r:
-			self.assertEqual(r.stdout.strip(), '\n'.join(f"host:repo{i} -> {Path('repo%d' % i).resolve()}" for i in range(1, numClones + 1)))
+			self.assertEqual(r.stdout.strip().split(os.linesep), [f"host:repo{i} -> {Path('repo%d' % i).resolve()}" for i in range(1, numClones + 1)])
 
 	def whereHelper(self, numRepos, format, *, makeHost = True) -> Iterable[GotRun]:
 		if makeHost:
@@ -961,7 +961,7 @@ class Tests(TestCase):
 		with GotRun(['--scan', '.']) as r:
 			r.assertInStdout(f"Processing {len(repospecs)} repositories")
 			for repospec in repospecs[:2]:
-				r.assertInStdout(f"repos/bitbucket/{repospec}: registered as bitbucket:{repospec}")
+				r.assertInStdout(f"{os.path.join('repos', 'bitbucket', *repospec.split('/'))}: registered as bitbucket:{repospec}")
 			r.assertInStdout("Scan complete. Added 2 clones")
 
 	#TODO Test {--prune,--scan} --interactive? No ability to control stdin yet

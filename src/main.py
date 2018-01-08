@@ -369,6 +369,17 @@ def whence(repo: RepoSpec, format: str) -> Union[URL, JSON]:
 	elif format == 'json':
 		return json.dumps({'repospec': str(repo), 'host': host.name, 'url': url})
 
+def showClones(format: str) -> None:
+	if format == 'plain':
+		clones = Clone.loadAll(sort = 'repospec ASC')
+		if clones:
+			for clone in clones:
+				print(f"{clone.repospec} -> {clone.path}")
+		else:
+			print("No clones registered")
+	elif format == 'json':
+		print(json.dumps({str(clone.repospec): str(clone.path) for clone in Clone.loadAll()}))
+
 def showHosts(format: str) -> None:
 	if format == 'plain':
 		hosts = Host.loadAll(sort = 'name ASC')
@@ -855,6 +866,9 @@ whatParser.add_argument('dir', nargs = '?', default = '.', help = 'directory to 
 whenceParser = makeMode('whence', print_return(whence), 'find the remote git path for a package', ['remote'])
 whenceParser.add_argument('repo', type = type_repospec)
 whenceParser.add_argument('--format', choices = ['plain', 'json'], default = 'plain')
+
+clonesParser = makeMode('clones', showClones, 'list all registered git clones')
+clonesParser.add_argument('--format', choices = ['plain', 'json'], default = 'plain')
 
 hostsParser = makeMode('hosts', showHosts, 'list all registered git hosts')
 hostsParser.add_argument('--format', choices = ['plain', 'json'], default = 'plain')

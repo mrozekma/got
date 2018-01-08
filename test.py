@@ -390,6 +390,11 @@ class Tests(TestCase):
 		with GotRun(['--rm-host', 'bad']) as r:
 			r.assertFails()
 
+	def test_clones(self):
+		numClones = len(self.git_helper())
+		with GotRun(['--clones']) as r:
+			self.assertEqual(r.stdout.strip(), '\n'.join(f"host:repo{i} -> {Path('repo%d' % i).resolve()}" for i in range(1, numClones + 1)))
+
 	def whereHelper(self, numRepos, format, *, makeHost = True) -> Iterable[GotRun]:
 		if makeHost:
 			hostData = self.addBitbucketHost('bitbucket')

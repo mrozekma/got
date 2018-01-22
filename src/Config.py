@@ -5,7 +5,8 @@ import os
 from typing import *
 
 DEFAULT_CONFIG = {
-	'clone_root': str(gotRoot / 'repos'),
+	'clone_root': gotRoot / 'repos',
+	'default_branch': ':head',
 }
 
 class Config(ActiveRecord):
@@ -23,14 +24,20 @@ class Config(ActiveRecord):
 
 # Config is always string keys -> string values, and the key set is fixed, so browsing it as a namespace is convenient
 class ConfigInterface:
-	def __getattr__(self, k: str) -> str:
+	def __getitem__(self, k: str) -> str:
 		try:
 			return Config.load(key = k).value
 		except ValueError:
 			raise ValueError(f"Unrecognized configuration key: {k}")
 
-	def __setattr__(self, k: str, v: str):
+	def __setitem__(self, k: str, v: str):
 		Config(k, v).save()
+
+	def __getattr__(self, k: str) -> str:
+		return self[k]
+
+	def __setattr__(self, k: str, v: str):
+		self[k] = v
 
 	def all(self) -> Iterable[Config]:
 		return Config.loadAll()
@@ -38,5 +45,20 @@ class ConfigInterface:
 	def keys(self) -> Iterable[str]:
 		for config in self.all():
 			yield config.key
+
+	def ensureDefaults(self):
+		# Make sure all the keys exist
+		# I don't really like len(DEFAULT_CONFIG) queries getting run on every got execution, so instead of this:
+
+		# for k, v in DEFAULT_CONFIG.items():
+		# 	try:
+		# 		config[k]
+		# 	except ValueError:
+		# 		config[k] = v
+
+		# I do this:
+
+		from .DB import db
+		db.update(f"INSERT OR IGNORE INTO config VALUES {', '.join('(?, ?)' for _ in DEFAULT_CONFIG)}", *[i for l in DEFAULT_CONFIG.items() for i in l])
 
 config = ConfigInterface()

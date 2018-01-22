@@ -50,8 +50,10 @@ for v in allHostData.values():
 		v['password'] = HideStr(v['password'])
 
 class GotRun:
-	def __init__(self, args):
+	def __init__(self, args, *, cwd = None, gotRootSubdir = None):
 		self.args = args
+		self.cwd = cwd
+		self.gotRootSubdir = gotRootSubdir
 		self._stdout, self._stderr = None, None
 		self.checkedExit = False
 		self.proc = None
@@ -92,6 +94,8 @@ class GotRun:
 					break
 			else:
 				raise RuntimeError(f"Current directory {Path.cwd().resolve()} is not within a test case rundir")
+		if self.gotRootSubdir is not None:
+			root /= self.gotRootSubdir
 		env['GOT_ROOT'] = str(root)
 		return env
 
@@ -99,7 +103,7 @@ class GotRun:
 		args = self.makeCommand()
 		print(f"Run: {args}")
 		print()
-		self.proc = subprocess.Popen(args, env = self.makeEnvironment(), stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+		self.proc = subprocess.Popen(args, cwd = self.cwd, env = self.makeEnvironment(), stdout = subprocess.PIPE, stderr = subprocess.PIPE)
 		self.proc.__enter__()
 		return self
 
@@ -150,7 +154,7 @@ class GotRun:
 			self.fail("Wrong stderr; didn't match pattern")
 
 class Tests(TestCase):
-	def addHost(self, type, name, url, username = None, password = None, sshKey = None, cloneUrl = None, cloneRoot = None, force = False, shouldWork = True):
+	def addHost(self, type, name, url, username = None, password = None, sshKey = None, cloneUrl = None, cloneRoot = None, force = False, shouldWork = True, gotRootSubdir = None):
 		args = ['--add-host', '-t', type, name, url]
 		if username:
 			args += ['-u', username]
@@ -165,7 +169,7 @@ class Tests(TestCase):
 		if force:
 			args.append('--force')
 
-		with GotRun(args) as r:
+		with GotRun(args, gotRootSubdir = gotRootSubdir) as r:
 			if not shouldWork:
 				r.assertFails()
 
@@ -584,6 +588,70 @@ class Tests(TestCase):
 			test('repo2')
 			test('repo1+', ['repo1', 'repo2', 'repo3', 'repo4'])
 			test('repo2+', ['repo2', 'repo4'])
+
+	def test_where_default_branch(self):
+		# Make a "host" folder with a bunch of repos on different branches
+		hostDir = Path('host')
+		repos = [git.Repo.init(str(hostDir / f"repo{i}")) for i in range(5)]
+
+		# repo0 just stays on master
+		repos[0].index.commit('Initial commit')
+		# repo1 also stays on master, but has a branch named foo
+		repos[1].index.commit('Initial commit')
+		repos[1].create_head('foo')
+		# repo2 is on foo, depends on repo4
+		repos[2].index.commit('Initial commit')
+		repos[2].create_head('foo').checkout()
+		(hostDir / 'repo2' / 'deps.got').write_text('repo4')
+		repos[2].index.add(['deps.got'])
+		repos[2].index.commit('Add deps.got')
+		# repo3 is on bar, has no foo, depends on repo4
+		repos[3].index.commit('Initial commit')
+		repos[3].create_head('bar').checkout()
+		(hostDir / 'repo3' / 'deps.got').write_text('repo4')
+		repos[3].index.add(['deps.got'])
+		repos[3].index.commit('Add deps.got')
+		# repo4 is on master, has foo
+		repos[4].index.commit('Initial commit')
+		repos[4].create_head('foo')
+
+		# HEADs of each repo: ['master', 'master', 'foo', 'bar', 'master']
+		subtests = {
+			None: ['master', 'master', 'foo', 'bar', 'master'],
+			':head': ['master', 'master', 'foo', 'bar', 'master'],
+			':inherit': ['master', 'master', 'foo', 'bar', 'master'],
+			'foo': ['master', 'foo', 'foo', 'bar', 'foo'],
+
+			# These are special-cased below
+			'DEPS': ['master', 'master', 'foo', 'bar', 'foo'], # Run --deps from each directory after cloning it, which means repo2 will pull in 3 and 4
+			'CWD': ['master', 'foo', 'foo', 'bar', 'foo'], # Clone 2, then clone the others from 2's directory, so they should all be on foo if they have it
+		}
+
+		for default_branch, expected_branches in subtests.items():
+			# Make a host that pulls from the "host" folder
+			self.addHost('daemon', 'host', os.path.realpath('host'), gotRootSubdir = str(default_branch))
+
+			if default_branch is not None:
+				with GotRun(['--config', 'default_branch', ':inherit' if default_branch in ('DEPS', 'CWD') else default_branch], gotRootSubdir = str(default_branch)):
+					pass
+
+			if default_branch == 'CWD':
+				with GotRun([f"repo2"], cwd = os.sep, gotRootSubdir = str(default_branch)) as r:
+					repoPath = r.stdout.strip()
+					with GotRun([f"repo{i}" for i in range(5)], cwd = repoPath, gotRootSubdir = str(default_branch)):
+						pass
+
+			for i, expected_branch in enumerate(expected_branches):
+				with self.subTest(default_branch = default_branch, i = i):
+					# Set the working directory to the system root in the hopes that it's not a git repo -- we want to avoid running from within a repo because in some default branch modes we'll inherit that repo's current branch
+					with GotRun([f"repo{i}"], cwd = os.sep, gotRootSubdir = str(default_branch)) as r:
+						repoPath = r.stdout.strip()
+						repo = git.Repo(repoPath)
+					if default_branch == 'DEPS':
+						print("Cloning dependencies")
+						with GotRun(['--deps'], cwd = repoPath, gotRootSubdir = str(default_branch)) as r:
+							pass
+					self.assertEqual(repo.active_branch.name, expected_branch)
 
 	def test_here(self):
 		hostData = self.addBitbucketHost('bitbucket')

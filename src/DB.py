@@ -24,7 +24,7 @@ def v1(db):
 	db.update("CREATE TABLE config(key text PRIMARY KEY, value text NOT NULL)")
 	from .Config import DEFAULT_CONFIG
 	for k, v in DEFAULT_CONFIG.items():
-		db.update("INSERT INTO config VALUES(?, ?)", k, v)
+		db.update("INSERT INTO config VALUES(?, ?)", k, str(v))
 	db.update("CREATE TABLE clones(repospec RepoSpec PRIMARY KEY, path Path NOT NULL)");
 	db.update("CREATE TABLE bitbucket_hosts(name text PRIMARY KEY, url text NOT NULL, username text NOT NULL, ssh_key_path text, clone_url text)")
 	db.update("CREATE TABLE daemon_hosts(name text PRIMARY KEY, url text NOT NULL, username text NOT NULL, ssh_key_path text, clone_url text)")
@@ -375,3 +375,7 @@ for cls in (Path, PosixPath, WindowsPath):
 	registerType(cls, str, Path)
 
 db = DB(gotRoot)
+
+# We want to load the config defaults as soon as possible, but it has to be deferred until the database is loaded, so now that it is:
+from .Config import config
+config.ensureDefaults()

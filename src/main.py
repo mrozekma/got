@@ -15,7 +15,7 @@ import time
 
 from .DB import db, DB, Like
 from .Credential import Credential
-from .Config import config
+from .Config import config, DEFAULT_CONFIG
 from .Clone import Clone
 from .Host import Host
 
@@ -34,6 +34,13 @@ if platform.system() == 'Windows' and 'REQUESTS_CA_BUNDLE' not in os.environ:
 	ca.addstore('ROOT')
 	ca.addstore('CA')
 	os.environ['REQUESTS_CA_BUNDLE'] = ca.name
+
+# Not sure how expensive this is, so only doing it when the default branch is :inherit
+if config.default_branch == ':inherit' and 'GOT_DEFAULT_BRANCH' not in os.environ:
+	try:
+		os.environ['GOT_DEFAULT_BRANCH'] = git.Repo('.', search_parent_directories = True).active_branch.name
+	except:
+		pass
 
 class DeprecatedAction(argparse.Action):
 	def __init__(self, option_strings, dest, why = None, **kw):
@@ -227,13 +234,21 @@ def where(repo: RepoSpec, format: str, on_uncloned: str, ensure_on_disk: bool = 
 		if proc.wait() != 0:
 			raise RuntimeError("Clone failed:\n" + ''.join(stderr))
 
+		targetBranch = None if config.default_branch == ':head' else os.environ.get('GOT_DEFAULT_BRANCH', None) if config.default_branch == ':inherit' else config.default_branch
+
 		if repo.revision is not None:
 			r = git.Repo(str(localPath))
 			try:
 				r.head.reference = r.commit(repo.revision)
 				r.head.reset(index = True, working_tree = True)
 			except gitdb.exc.BadName:
-				r.git.checkout(repo.revision)
+				r.git.checkout(repo.revision, '--')
+		elif targetBranch is not None:
+			r = git.Repo(str(localPath))
+			try:
+				r.git.checkout(targetBranch, '--')
+			except git.exc.GitCommandError:
+				pass
 
 		clone = Clone(repo, localPath)
 		clone.save()
@@ -611,13 +626,16 @@ def configCLI(key: Optional[str], value: Optional[str]) -> None:
 		for c in config.all():
 			print(f"{c.key} = {c.value}")
 	else:
-		curValue = getattr(config, key)
+		curValue = config[key]
 		if value is None:
 			print(curValue)
 		else:
 			print(f"Old value: {curValue}")
-			newValue = str(Path(value).resolve())
-			setattr(config, key, newValue)
+			if isinstance(DEFAULT_CONFIG.get(key, None), Path):
+				newValue = str(Path(value).resolve())
+			else:
+				newValue = str(value)
+			config[key] = newValue
 			print(f"New value: {newValue}")
 
 def mv(repospec: RepoSpec, dest: str) -> None:

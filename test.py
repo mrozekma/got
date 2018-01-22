@@ -97,6 +97,7 @@ class GotRun:
 		if self.gotRootSubdir is not None:
 			root /= self.gotRootSubdir
 		env['GOT_ROOT'] = str(root)
+		env['GOT_VERBOSE'] = '2'
 		return env
 
 	def __enter__(self):
@@ -628,28 +629,29 @@ class Tests(TestCase):
 		}
 
 		for default_branch, expected_branches in subtests.items():
+			subRoot = str(default_branch).replace(':', '_') # Can't use ':' in Windows paths
 			# Make a host that pulls from the "host" folder
-			self.addHost('daemon', 'host', os.path.realpath('host'), gotRootSubdir = str(default_branch))
+			self.addHost('daemon', 'host', os.path.realpath('host'), gotRootSubdir = subRoot)
 
 			if default_branch is not None:
-				with GotRun(['--config', 'default_branch', ':inherit' if default_branch in ('DEPS', 'CWD') else default_branch], gotRootSubdir = str(default_branch)):
+				with GotRun(['--config', 'default_branch', ':inherit' if default_branch in ('DEPS', 'CWD') else default_branch], gotRootSubdir = subRoot):
 					pass
 
 			if default_branch == 'CWD':
-				with GotRun([f"repo2"], cwd = os.sep, gotRootSubdir = str(default_branch)) as r:
+				with GotRun([f"repo2"], cwd = os.sep, gotRootSubdir = subRoot) as r:
 					repoPath = r.stdout.strip()
-					with GotRun([f"repo{i}" for i in range(5)], cwd = repoPath, gotRootSubdir = str(default_branch)):
+					with GotRun([f"repo{i}" for i in range(5)], cwd = repoPath, gotRootSubdir = subRoot):
 						pass
 
 			for i, expected_branch in enumerate(expected_branches):
 				with self.subTest(default_branch = default_branch, i = i):
 					# Set the working directory to the system root in the hopes that it's not a git repo -- we want to avoid running from within a repo because in some default branch modes we'll inherit that repo's current branch
-					with GotRun([f"repo{i}"], cwd = os.sep, gotRootSubdir = str(default_branch)) as r:
+					with GotRun([f"repo{i}"], cwd = os.sep, gotRootSubdir = subRoot) as r:
 						repoPath = r.stdout.strip()
 						repo = git.Repo(repoPath)
 					if default_branch == 'DEPS':
 						print("Cloning dependencies")
-						with GotRun(['--deps'], cwd = repoPath, gotRootSubdir = str(default_branch)) as r:
+						with GotRun(['--deps'], cwd = repoPath, gotRootSubdir = subRoot) as r:
 							pass
 					self.assertEqual(repo.active_branch.name, expected_branch)
 
@@ -912,7 +914,7 @@ class Tests(TestCase):
 		with GotRun(['--git', '-C', 'repo1', '--ignore-errors', 'show', r2.head.commit.hexsha]) as r:
 			r.assertInStdout('Ignored error')
 
-	all_config_keys = ['clone_root']
+	all_config_keys = ['clone_root', 'default_branch']
 
 	def test_config_list_all(self):
 		with GotRun(['--config']) as r:

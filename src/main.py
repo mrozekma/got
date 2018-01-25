@@ -710,7 +710,7 @@ def scan(dirs: Iterable[str], interactive: bool) -> None:
 			pass
 
 		try:
-			r = git.Repo(repoRoot)
+			r = git.Repo(str(repoRoot))
 			url = r.remotes['origin'].url
 		except git.exc.InvalidGitRepositoryError:
 			print('invalid git repository')

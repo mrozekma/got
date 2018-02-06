@@ -2,11 +2,33 @@ from .DB import ActiveRecord
 from .utils import gotRoot
 
 import os
+from pathlib import Path
 from typing import *
 
-DEFAULT_CONFIG = {
+DEFAULT_CONFIG: Dict[str, Any] = {
+	'clone_retries': 0,
 	'clone_root': gotRoot / 'repos',
 	'default_branch': ':head',
+}
+
+def cloneRetriesValidator(v: str):
+	try:
+		if int(v) < 0:
+			raise ValueError("Negative")
+	except ValueError:
+		raise ValueError("clone_retries must be a non-negative integer")
+
+def cloneRootValidator(v: str) -> str:
+	return str(Path(v).resolve())
+
+def defaultBranchValidator(v: str):
+	if v.startswith(':') and v not in (':head', ':inherit'):
+		raise ValueError(f"Unrecognized default branch: {v}")
+
+CONFIG_VALIDATORS: Dict[str, Callable[[str], Optional[str]]] = {
+	'clone_retries': cloneRetriesValidator,
+	'clone_root': cloneRootValidator,
+	'default_branch': defaultBranchValidator,
 }
 
 class Config(ActiveRecord):

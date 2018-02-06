@@ -15,7 +15,7 @@ import time
 
 from .DB import db, DB, Like
 from .Credential import Credential
-from .Config import config, DEFAULT_CONFIG
+from .Config import config, DEFAULT_CONFIG, CONFIG_VALIDATORS
 from .Clone import Clone
 from .Host import Host
 
@@ -219,19 +219,26 @@ def where(repo: RepoSpec, format: str, on_uncloned: str, ensure_on_disk: bool = 
 
 		env = dict(os.environ)
 		env.update(makeGitEnvironment(host))
-		proc = subprocess.Popen(['git', 'clone', '-v', '--progress', url, str(localPath)], env = env, stdout = subprocess.DEVNULL, stderr = subprocess.PIPE, universal_newlines = True)
-		stderr = []
-		if progress is not None:
-			progress = GitProgress()
-			handler = progress.new_message_handler()
-			for line in proc.stderr:
-				stderr.append(line)
-				handler(line)
-			progress.finish()
+
+		for _ in range(int(config.clone_retries) + 1):
+			proc = subprocess.Popen(['git', 'clone', '-v', '--progress', url, str(localPath)], env = env, stdout = subprocess.DEVNULL, stderr = subprocess.PIPE, universal_newlines = True)
+			stderr = []
+			if progress is not None:
+				progress = GitProgress()
+				handler = progress.new_message_handler()
+				for line in proc.stderr:
+					stderr.append(line)
+					handler(line)
+				progress.finish()
+			else:
+				for line in proc.stderr:
+					stderr.append(line)
+			if proc.wait() == 0:
+				break
+			if verbose(2):
+				print("Clone failed (will retry):\n" + ''.join(stderr))
+			time.sleep(5)
 		else:
-			for line in proc.stderr:
-				stderr.append(line)
-		if proc.wait() != 0:
 			raise RuntimeError("Clone failed:\n" + ''.join(stderr))
 
 		targetBranch = None if config.default_branch == ':head' else os.environ.get('GOT_DEFAULT_BRANCH', None) if config.default_branch == ':inherit' else config.default_branch
@@ -631,12 +638,12 @@ def configCLI(key: Optional[str], value: Optional[str]) -> None:
 			print(curValue)
 		else:
 			print(f"Old value: {curValue}")
-			if isinstance(DEFAULT_CONFIG.get(key, None), Path):
-				newValue = str(Path(value).resolve())
-			else:
-				newValue = str(value)
-			config[key] = newValue
-			print(f"New value: {newValue}")
+			if key in CONFIG_VALIDATORS:
+				processed = CONFIG_VALIDATORS[key](value)
+				if processed is not None:
+					value = processed
+			config[key] = str(value)
+			print(f"New value: {value}")
 
 def mv(repospec: RepoSpec, dest: str) -> None:
 	with repospec.lock():

@@ -569,7 +569,8 @@ The following configuration keys can be read and written with :ref:`--config <co
 ========================= ============================== ================================================================================
 Key                       Default                        Description
 ========================= ============================== ================================================================================
-clone_root                <GOT_ROOT>/repos               Directory to store the cloned repositories in
+clone_retries             0                              Number of additional attempts to make when cloning a new repository before giving up.
+clone_root                <GOT_ROOT>/repos               Directory to store the cloned repositories in.
 default_branch            :head                          Branch to checkout when cloning new repositories. This can be a literal branch name, `:head` to use the remote repository's current branch, or `:inherit` to use the branch of the repository you're currently in. It is never an error if the specified branch does not exist for a particular repository (the remote head is used instead).
 ========================= ============================== ================================================================================
 

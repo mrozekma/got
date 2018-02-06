@@ -914,7 +914,7 @@ class Tests(TestCase):
 		with GotRun(['--git', '-C', 'repo1', '--ignore-errors', 'show', r2.head.commit.hexsha]) as r:
 			r.assertInStdout('Ignored error')
 
-	all_config_keys = ['clone_root', 'default_branch']
+	all_config_keys = ['clone_retries', 'clone_root', 'default_branch']
 
 	def test_config_list_all(self):
 		with GotRun(['--config']) as r:

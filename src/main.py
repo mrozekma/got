@@ -206,9 +206,12 @@ def where(repo: RepoSpec, format: str, on_uncloned: str, ensure_on_disk: bool = 
 			clone = here(repo, str(localPath), False)
 			return formatRtn(clone)
 
+		targetBranch = None if config.default_branch == ':head' else os.environ.get('GOT_DEFAULT_BRANCH', None) if config.default_branch == ':inherit' else config.default_branch
+
 		os.makedirs(localPath.parent, exist_ok = True)
 		if verbose(1):
-			print(f"Cloning {url} to {localPath}")
+			src = url if targetBranch is None else f"{url} ({targetBranch})"
+			print(f"Cloning {src} to {localPath}")
 		from .GitProgress import GitProgress
 
 		# There seems to be a GitPython bug that prevent this from working well: https://github.com/gitpython-developers/GitPython/issues/444#issuecomment-320523860
@@ -240,8 +243,6 @@ def where(repo: RepoSpec, format: str, on_uncloned: str, ensure_on_disk: bool = 
 			time.sleep(5)
 		else:
 			raise RuntimeError("Clone failed:\n" + ''.join(stderr))
-
-		targetBranch = None if config.default_branch == ':head' else os.environ.get('GOT_DEFAULT_BRANCH', None) if config.default_branch == ':inherit' else config.default_branch
 
 		if repo.revision is not None:
 			r = git.Repo(str(localPath))

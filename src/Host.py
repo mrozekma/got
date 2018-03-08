@@ -115,7 +115,7 @@ class SubclassableHost:
 		return re.compile(pattern)
 
 	def getEffectiveCloneRoot(self):
-		return Path(self.clone_root) if self.clone_root is not None else (Path(config.clone_root) / self.name)
+		return Path(self.clone_root) if ('GOT_WORKTREE' not in os.environ and self.clone_root is not None) else (Path(config.clone_root) / self.name)
 
 	@abc.abstractmethod
 	def getType(self = None):

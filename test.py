@@ -184,7 +184,7 @@ class Tests(TestCase):
 		return data
 
 	def assertRepoOriginatesFrom(self, repoPath, originUrl):
-		repo = git.Repo(repoPath)
+		repo = git.Repo(str(repoPath))
 		self.assertEqual([originUrl], list(repo.remotes.origin.urls))
 
 	def test_help(self):

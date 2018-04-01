@@ -782,7 +782,7 @@ def run(repos: Iterable[Iterable[RepoSpec]], cmd: List[str], bg: bool, ignore_er
 	exit(sum(proc.wait() != 0 for proc in procs))
 
 def showVersion() -> None:
-	r = git.Repo(Path(__file__).resolve().parent.parent)
+	r = git.Repo(str(Path(__file__).resolve().parent.parent))
 	hash = r.git.describe(tags = True, long = True, dirty = True, always = True)
 	print(f"got {hash}")
 

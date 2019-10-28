@@ -227,7 +227,6 @@ def where(repo: RepoSpec, format: str, on_uncloned: str, ensure_on_disk: bool = 
 			proc = subprocess.Popen(['git', 'clone', '-v', '--progress', url, str(localPath)], env = env, stdout = subprocess.DEVNULL, stderr = subprocess.PIPE, universal_newlines = True)
 			stderr = []
 			if progress is not None:
-				progress = GitProgress()
 				handler = progress.new_message_handler()
 				for line in proc.stderr:
 					stderr.append(line)

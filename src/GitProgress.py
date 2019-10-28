@@ -3,7 +3,7 @@ import sys
 
 from git.util import RemoteProgress
 
-class Label(progressbar.widgets.FormatWidgetMixin, progressbar.widgets.WidgetBase):
+class Label(progressbar.widgets.FormatLabel):
 	def __init__(self):
 		self.state = ''
 		super().__init__(format = '%(state)s (%(value)s of %(max_value)s)')

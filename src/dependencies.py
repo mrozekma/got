@@ -9,6 +9,7 @@ import sys
 
 requirementsPath = Path(__file__).parent.parent / 'requirements.txt'
 pattern = re.compile('^([a-zA-Z0-9]+).*?(?:; sys_platform == \'([^\']+)\')?.*?(?: # ([a-zA-Z0-9]+))?$')
+installed = True
 for line in requirementsPath.read_text().split('\n'):
 	match = pattern.match(line)
 	if match:
@@ -18,7 +19,8 @@ for line in requirementsPath.read_text().split('\n'):
 		try:
 			import_module(package or project)
 		except ImportError:
-			raise RuntimeError(f"Missing Python dependencies. Run the following to install: {sys.executable} -m pip install -r {requirementsPath}")
+			installed = False
+			break
 
 try:
 	import _sqlite3

@@ -5,6 +5,9 @@ if sys.version_info < (3, 6):
 
 import argparse
 import os
+from pathlib import Path
+import subprocess
+
 parser = argparse.ArgumentParser(add_help = False)
 parser.add_argument('-v', '--verbose', action = 'count', default = None, help = 'increase the verbosity level')
 parser.add_argument('-q', '--quiet', action = 'store_const', dest = 'verbose', const = 0, help = "don't output verbose information to stderr (clear the verbosity level)")
@@ -28,8 +31,23 @@ verbose(set = verbosity)
 del verbosity
 
 if __name__ == '__main__':
+	rootDir = Path(__file__).parent
+	envDir = rootDir / 'venv'
+	if 'VIRTUAL_ENV' not in os.environ:
+		if not envDir.is_dir():
+			print("Creating virtual environment", file = sys.stderr)
+			import venv
+			venv.create(str(envDir), with_pip = True)
+
+		# activate_this.py is in the project root but expects to be within a virtualenv, so we lie about __file__
+		exec((rootDir / 'activate_this.py').read_text(), { '__file__': str(envDir / 'bin' / 'activate_this.py') })
+
 	try:
 		from src import dependencies
+		if not dependencies.installed:
+			print("Installing dependencies", file = sys.stderr)
+			subprocess.check_call([ str(envDir / 'bin' / 'pip'), 'install', '-r', str(rootDir / 'requirements.txt') ], stdout = sys.stderr, stderr = sys.stderr)
+
 		from src import main
 	except Exception as e:
 		print("Fatal error: %s" % e, file = sys.stderr)

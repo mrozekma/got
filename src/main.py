@@ -1,4 +1,5 @@
 import argparse
+import contextlib
 from getpass import getpass
 import git, gitdb
 import itertools
@@ -223,39 +224,40 @@ def where(repo: RepoSpec, format: str, on_uncloned: str, ensure_on_disk: bool = 
 		env = dict(os.environ)
 		env.update(makeGitEnvironment(host))
 
-		for _ in range(int(config.clone_retries) + 1):
-			proc = subprocess.Popen(['git', 'clone', '-v', '--progress', url, str(localPath)], env = env, stdout = subprocess.DEVNULL, stderr = subprocess.PIPE, universal_newlines = True)
-			stderr = []
-			if progress is not None:
-				handler = progress.new_message_handler()
-				for line in proc.stderr:
-					stderr.append(line)
-					handler(line)
-				progress.finish()
+		with progress or contextlib.nullcontext():
+			for _ in range(int(config.clone_retries) + 1):
+				proc = subprocess.Popen(['git', 'clone', '-v', '--progress', url, str(localPath)], env = env, stdout = subprocess.DEVNULL, stderr = subprocess.PIPE, universal_newlines = True)
+				stderr = []
+				if progress is not None:
+					handler = progress.new_message_handler()
+					for line in proc.stderr:
+						stderr.append(line)
+						handler(line)
+					progress.finish()
+				else:
+					for line in proc.stderr:
+						stderr.append(line)
+				if proc.wait() == 0:
+					break
+				if verbose(2):
+					print("Clone failed (will retry):\n" + ''.join(stderr))
+				time.sleep(5)
 			else:
-				for line in proc.stderr:
-					stderr.append(line)
-			if proc.wait() == 0:
-				break
-			if verbose(2):
-				print("Clone failed (will retry):\n" + ''.join(stderr))
-			time.sleep(5)
-		else:
-			raise RuntimeError("Clone failed:\n" + ''.join(stderr))
+				raise RuntimeError("Clone failed:\n" + ''.join(stderr))
 
-		if repo.revision is not None:
-			r = git.Repo(str(localPath))
-			try:
-				r.head.reference = r.commit(repo.revision)
-				r.head.reset(index = True, working_tree = True)
-			except gitdb.exc.BadName:
-				r.git.checkout(repo.revision, '--')
-		elif targetBranch is not None:
-			r = git.Repo(str(localPath))
-			try:
-				r.git.checkout(targetBranch, '--')
-			except git.exc.GitCommandError:
-				pass
+			if repo.revision is not None:
+				r = git.Repo(str(localPath))
+				try:
+					r.head.reference = r.commit(repo.revision)
+					r.head.reset(index = True, working_tree = True)
+				except gitdb.exc.BadName:
+					r.git.checkout(repo.revision, '--')
+			elif targetBranch is not None:
+				r = git.Repo(str(localPath))
+				try:
+					r.git.checkout(targetBranch, '--')
+				except git.exc.GitCommandError:
+					pass
 
 		clone = Clone(repo, localPath)
 		clone.save()

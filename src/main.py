@@ -1,5 +1,4 @@
 import argparse
-import contextlib
 from getpass import getpass
 import git, gitdb
 import itertools
@@ -224,7 +223,13 @@ def where(repo: RepoSpec, format: str, on_uncloned: str, ensure_on_disk: bool = 
 		env = dict(os.environ)
 		env.update(makeGitEnvironment(host))
 
-		with progress or contextlib.nullcontext():
+		class nullcontext:
+			def __enter__(self):
+				pass
+			def __exit__(self, *excinfo):
+				pass
+
+		with progress or nullcontext():
 			for _ in range(int(config.clone_retries) + 1):
 				proc = subprocess.Popen(['git', 'clone', '-v', '--progress', url, str(localPath)], env = env, stdout = subprocess.DEVNULL, stderr = subprocess.PIPE, universal_newlines = True)
 				stderr = []
